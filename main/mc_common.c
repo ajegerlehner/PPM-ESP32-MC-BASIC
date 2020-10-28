@@ -182,7 +182,7 @@ esp_err_t nvs_read_str_value(const char *keyName, char *retString, size_t* retLe
     ret = nvs_get_str(nvsHandle, (const char *)keyName, NULL, &strLength);
     if (ret != ESP_OK)
     {
-        ESP_LOGE(TAG, "Error reading nvs key/value pair string length%s", keyName);
+        ESP_LOGE(TAG, "Error reading nvs key/value %s string length", keyName);
         nvs_close(nvsHandle);
         return ret;
     }
