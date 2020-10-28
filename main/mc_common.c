@@ -147,8 +147,8 @@ esp_err_t wifi_init()
 
     if (ssid != NULL && ssid_pwd != NULL)
     {
-    sprintf(statusTxt, "WiFi: %s, %s", ssid, ssid_pwd);
-    create_status_msg(&deviceStatus, &samplingMsg, statusTxt);         
+        sprintf(statusTxt, "WiFi: %s, %s", ssid, ssid_pwd);
+        create_status_msg(&deviceStatus, &samplingMsg, statusTxt);         
     }
  
     free(ssid);
