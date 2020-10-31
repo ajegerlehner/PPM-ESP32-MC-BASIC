@@ -28,11 +28,14 @@
 
 esp_err_t nvs_init();
 esp_err_t wifi_init();
+esp_err_t enter_config_mode();
 esp_err_t prepare_network();
-esp_err_t nvs_read_str_value(const char *keyName, char* retString, size_t* retLength);
+esp_err_t nvs_read_str_value(const char *keyName, char** retString);
 esp_err_t nvs_write_str_value(char *keyName, char* writeString);
 esp_err_t nvs_read_uint32_value(char *keyName, uint32_t *ret_val);
 esp_err_t nvs_write_uint32_value(char *keyName, uint32_t val);
+esp_err_t nvs_delete_key(char *keyName);
 void incrementMsgReceived();
+void reboot_task(void *pvParameter);
 
 #endif

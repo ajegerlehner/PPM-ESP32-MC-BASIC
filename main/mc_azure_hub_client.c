@@ -305,6 +305,7 @@ int deviceMethodCallback(const char* method_name, const unsigned char* payload, 
     (void)size;
 
     int result;
+    BaseType_t taskResult;
 
     if (strcmp("REBOOT", strupr((char*)method_name)) == 0)
     {
@@ -313,7 +314,42 @@ int deviceMethodCallback(const char* method_name, const unsigned char* payload, 
         *response = malloc(*response_size);
         (void)memcpy(*response, deviceMethodResponse, *response_size);
         result = 200;
+        
+        // spawn reboot task
+        taskResult = xTaskCreate(&reboot_task, "reboot_task", 1024, NULL, 9, NULL); 
+        if (taskResult != pdPASS)
+        {   
+            ESP_LOGE(TAG, "Create reboot task failed"); 
+        }
     }
+    else if (strcmp("NVSCLEAR", strupr((char*)method_name)) == 0)
+    {
+        if (nvs_delete_key(NVS_SSID_TAG) == ESP_OK && 
+            nvs_delete_key(NVS_SSID_PWD_TAG) == ESP_OK)
+        {
+            const char deviceMethodResponse[] = "{ \"Response\": \"WiFi keys erased.\" }";
+            *response_size = sizeof(deviceMethodResponse)-1;
+            *response = malloc(*response_size);
+            (void)memcpy(*response, deviceMethodResponse, *response_size);
+            result = 200;
+            
+            // spawn reboot task
+            taskResult = xTaskCreate(&reboot_task, "reboot_task", 1024, NULL, 9, NULL); 
+            if (taskResult != pdPASS)
+            {   
+                ESP_LOGE(TAG, "Create reboot task failed"); 
+            }
+
+            }
+        else
+        {
+            const char deviceMethodResponse[] = "{ \"Response\": \"Error erasing WiFi keys.\" }";
+            *response_size = sizeof(deviceMethodResponse)-1;
+            *response = malloc(*response_size);
+            (void)memcpy(*response, deviceMethodResponse, *response_size);
+            result = 1;
+        }        
+    }    
     else
     {
         // All other entries are ignored.

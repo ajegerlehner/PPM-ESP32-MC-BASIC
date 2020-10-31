@@ -85,7 +85,7 @@ void get_device_config()
 
         // no point to continue - restart
         ESP_LOGE(TAG, "HTTP POST request failed, restarting esp32");
-        //esp_restart();
+        esp_restart();
     }
     
     // release client 

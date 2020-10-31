@@ -83,15 +83,15 @@ static void got_ip_event_handler(void *arg, esp_event_base_t event_base,
         {
             ESP_LOGE(TAG, "Set Ethernet as default IF error: %s", esp_err_to_name(ret));
         }
-    //if (event->ip_changed)
-    //{
-    //    ESP_ERROR_CHECK(tcpip_adapter_set_hostname(TCPIP_ADAPTER_IF_ETH, "PPM-ETHERNET"));
-    //    ret = set_default_if(TCPIP_ADAPTER_IF_ETH);
-    //    if (ret != ESP_OK)
-    //    {
-    //        ESP_LOGE(TAG, "Set Ethernet as default IF error: %s", esp_err_to_name(ret));
-    //    }
-    //}
+    if (event->ip_changed)
+    {
+        ESP_ERROR_CHECK(tcpip_adapter_set_hostname(TCPIP_ADAPTER_IF_ETH, "PPM-ETHERNET"));
+        ret = set_default_if(TCPIP_ADAPTER_IF_ETH);
+        if (ret != ESP_OK)
+        {
+            ESP_LOGE(TAG, "Set Ethernet as default IF error: %s", esp_err_to_name(ret));
+        }
+    }
     
     ESP_LOGI(TAG, "Ethernet IP address: " IPSTR " Mask: " IPSTR " Gwy: " IPSTR, IP2STR(&ip_info->ip), IP2STR(&ip_info->netmask), IP2STR(&ip_info->gw));
 }

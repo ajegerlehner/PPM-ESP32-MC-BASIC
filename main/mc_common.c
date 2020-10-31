@@ -6,6 +6,14 @@
 
 #define TAG "COMMON"
 
+// WiFi AP mode
+#define SSID_AP         "PPM-MC"
+#define SSID_AP_PWD     "12345678"
+#define SSID_AP_MAXCONN 1
+#define SSID_AP_CHANNEL 0
+
+#define REBOOT_DELAY    10
+
 //Declare static prototype
 static esp_err_t esp32_event_handler(void *ctx, system_event_t *event);
 
@@ -96,11 +104,9 @@ esp_err_t nvs_init()
 *******************************************************************************/
 esp_err_t wifi_init()
 {
-    uint8_t *ssid = NULL;
-    uint8_t *ssid_pwd = NULL;
+    char *ssid = NULL;
+    char *ssid_pwd = NULL;
     esp_err_t ret;
-    size_t  strLen;  
-    char statusTxt[100];  
 
     //Initialize WiFi
     wifi_event_grp = xEventGroupCreate();
@@ -111,30 +117,32 @@ esp_err_t wifi_init()
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
     ESP_ERROR_CHECK(esp_wifi_init(&cfg));
     
-    ret = nvs_read_str_value(NVS_SSID_TAG, (char *)ssid, &strLen);
+    ret = nvs_read_str_value(NVS_SSID_TAG, &ssid);
     if (ret != ESP_OK)
     {
-        // enter AP mode
-        //return ESP_OK;
-        nvs_write_str_value(NVS_SSID_TAG, "devolo-444");
-        nvs_read_str_value(NVS_SSID_TAG, (char *)ssid, &strLen);
-    }
+        enter_config_mode();
 
-    ret = nvs_read_str_value(NVS_SSID_PWD_TAG, (char*)ssid_pwd, &strLen);
+        // restart chip
+        esp_restart();
+    }
+    
+    ret = nvs_read_str_value(NVS_SSID_PWD_TAG, &ssid_pwd);
     if (ret != ESP_OK)
     {
-        // enter AP mode
-        //return ESP_OK;
-        nvs_write_str_value(NVS_SSID_PWD_TAG, "BGTXKDVWQGNQOJLH");
-        nvs_read_str_value(NVS_SSID_PWD_TAG, (char *)ssid_pwd, &strLen);
+        enter_config_mode();
+        
+        // restart chip
+        esp_restart();
     }
     
     wifi_config_t wifi_config = {
-        .sta = {
-            .ssid = ESP_WIFI_SSID,
-            .password = ESP_WIFI_PASS
-        },
-    };   
+        .sta = {}
+    };
+
+    memcpy(wifi_config.sta.ssid, ssid, strlen(ssid));
+    memcpy(wifi_config.sta.password, ssid_pwd, strlen(ssid_pwd));
+    
+
 
     //Check for errors
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
@@ -142,17 +150,36 @@ esp_err_t wifi_init()
     ESP_ERROR_CHECK(esp_wifi_start());
 
     ESP_LOGI(TAG, "wifi_init finished.");
-    ESP_LOGI(TAG, "Connected to WiFi AP-SSID:%s password:%s",
-             ssid, ssid_pwd);
-
-    if (ssid != NULL && ssid_pwd != NULL)
-    {
-        sprintf(statusTxt, "WiFi: %s, %s", ssid, ssid_pwd);
-        create_status_msg(&deviceStatus, &samplingMsg, statusTxt);         
-    }
+    ESP_LOGI(TAG, "Connected to WiFi AP-SSID:%s password:%s", ssid, ssid_pwd);
  
-    free(ssid);
-    free(ssid_pwd);
+    return ESP_OK;
+}
+
+esp_err_t enter_config_mode()
+{
+    // no ssid and pwasword was previously saved in nvs
+    // enter WiFi AP mode to serve a web page to select WiFi
+    // network
+
+    wifi_config_t wifi_config = {
+        .ap = {
+            .ssid = SSID_AP,
+            .password = SSID_AP_PWD,
+            .max_connection = SSID_AP_MAXCONN,
+            .channel = SSID_AP_CHANNEL,
+            .ssid_hidden = 0
+        }
+    };
+
+    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_AP));
+    ESP_ERROR_CHECK(esp_wifi_set_config(ESP_IF_WIFI_AP, &wifi_config) );
+    ESP_ERROR_CHECK(esp_wifi_start());
+
+    while (1)
+    {
+        vTaskDelay(ONE_SECOND_DELAY * 5);
+        printf("Waiting for WiFi config...\n");
+    }
     return ESP_OK;
 }
 
@@ -165,7 +192,7 @@ esp_err_t prepare_network()
     return ESP_OK;
 }
 
-esp_err_t nvs_read_str_value(const char *keyName, char *retString, size_t* retLength)
+esp_err_t nvs_read_str_value(const char *keyName, char **retString)
 {
     nvs_handle_t nvsHandle;
     esp_err_t    ret;
@@ -188,14 +215,16 @@ esp_err_t nvs_read_str_value(const char *keyName, char *retString, size_t* retLe
     }
 
     // strLength including null terminator
-    retString = malloc(strLength);
-    ret = nvs_get_str(nvsHandle, (const char *)keyName, retString, &strLength);
+    *retString = malloc(strLength);
+    ret = nvs_get_str(nvsHandle, (const char *)keyName, *retString, &strLength);
     if (ret != ESP_OK)
     {
         ESP_LOGE(TAG, "Error reading nvs key/value pair %s", keyName);
         nvs_close(nvsHandle);
         return ret;
     }
+
+    ESP_LOGI(TAG, "Read key/value pair from NVS: %s / %s", keyName, *retString);
 
     nvs_close(nvsHandle);
 
@@ -289,7 +318,55 @@ esp_err_t nvs_write_uint32_value(char *keyName, uint32_t val)
     return ESP_OK;
 }
 
+esp_err_t nvs_delete_key(char *keyName)
+{
+    nvs_handle_t nvsHandle;
+    esp_err_t    ret;
+
+    ret = nvs_open(NVS_STORAGE_NS, NVS_READWRITE, &nvsHandle);
+    if (ret != ESP_OK)
+    {
+        ESP_LOGE(TAG, "NVS Erase: Error opening NVS storage %s", NVS_STORAGE_NS);
+        return ret;
+    }
+
+    ret = nvs_erase_key(nvsHandle, (const char *)keyName);
+    if (ret != ESP_OK)
+    {
+        ESP_LOGE(TAG, "NVS Erase: Error erasing keyValue %s", keyName);
+        nvs_close(nvsHandle);
+        return ret;
+    }
+
+    ret = nvs_commit(nvsHandle);
+    if (ret != ESP_OK)
+    {
+        ESP_LOGE(TAG, "NVS Erase: Error commiting erase operation for keyValue %s", keyName);
+        nvs_close(nvsHandle);
+        return ret;
+    }
+
+    nvs_close(nvsHandle);
+
+    ESP_LOGI(TAG, "NVS key %s successfully erased.", keyName);
+
+    return ESP_OK;
+}
+
 void incrementMsgReceived()
 {
     deviceStatus.azureMsgReceived++;
+}
+
+void reboot_task(void *pvParameter)
+{
+
+    while(1)
+    {
+        ESP_LOGE(TAG, "Rebooting chip in %d seconds.", REBOOT_DELAY);        
+        vTaskDelay(ONE_SECOND_DELAY * REBOOT_DELAY);
+        esp_restart();
+    }
+    
+    vTaskDelete(NULL);  
 }
