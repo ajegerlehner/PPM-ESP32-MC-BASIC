@@ -1,39 +1,4 @@
-menu "ESP32 App Config"
-
-config WIFI_SSID
-    string "WiFi SSID"
-	default "myssid"
-	help
-		SSID (network name) for the example to connect to.
-
-config WIFI_PASSWORD
-    string "WiFi Password"
-	default "mypassword"
-	help
-		WiFi password (WPA or WPA2) for the example to use.
-
-		Can be left blank if the network has no security set.
-
-config WIFI_MAXIMUM_RETRY
-	int "Maximum Wifi Connection Retry"
-	default 5
-	help
-		Set the Maximum Retry to connect to desire WIFI Access Point
-
-config IOTHUB_CONNECTION_STRING
-	string "Azure IoT Hub Device Connection String"
-	default "azureiot.com"
-	help
-		help
-		String containing Hostname, Device Id & Device Key in the format:
-		HostName=<host_name>;DeviceId=<device_id>;SharedAccessKey=<device_key>
-		You can get this from the Azure IoT CLI or the Azure Portal.
-
-config PPM_DEVICE_ID
-	string "PPM IoT device id"
-	default "ppm-esp32-dev01"
-	help
-		String containing the Azure IoT event hub devive id.
+menu "PPM-MC-IOT App Config"
 
 config PPM_IOT_CENTRAL_URL
 	string "PPM IoT Central api url"

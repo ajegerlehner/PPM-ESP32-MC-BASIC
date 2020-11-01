@@ -31,7 +31,7 @@ typedef struct AzDeviceTwin
 
 
 
-IOTHUB_DEVICE_CLIENT_LL_HANDLE init_iothub_client();
+IOTHUB_DEVICE_CLIENT_LL_HANDLE init_iothub_client(char *deviceId);
 int send_azure_msgs(char *msgToSend, IOTHUB_DEVICE_CLIENT_LL_HANDLE iothub_deviceclient);
 void process_azure_msgs(IOTHUB_DEVICE_CLIENT_LL_HANDLE iothub_deviceclient);
 void destroy_iothub_client(IOTHUB_DEVICE_CLIENT_LL_HANDLE iothub_deviceclient);

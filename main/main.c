@@ -41,6 +41,7 @@
 
 #define HEARTBEAT_TIME_INTERVAL 600
 
+char *iotDeviceId;
 DeviceConfig deviceConfig;  
 SamplingMessage samplingMsg;
 DeviceStatus deviceStatus;
@@ -68,6 +69,9 @@ void board_init()
     
     // initialize wifi connection
     ESP_ERROR_CHECK(wifi_init());
+
+    // read iotDeviceId from nvs flash
+    ESP_ERROR_CHECK(init_iotDeviceId());
 
     // initialize I2C communication
     i2c_bus_init();
@@ -227,6 +231,12 @@ void azure_task(void *pvParameter)
 // task to display sensor data on build in OLED display
 void show_sensor_task(void *pvParameter)
 {
+    // wait for statup procedure to complete
+    while (xSemaphoreTake(startUpMutex, (TickType_t) 10) != 1);
+
+    // free mutex 
+    xSemaphoreGive(startUpMutex);
+
     while(1)
     {
         oled_write_data(&samplingMsg, 0);
@@ -245,14 +255,14 @@ void app_main()
     
     board_init();
     vTaskDelay(ONE_SECOND_DELAY);
-    ESP_LOGI(TAG, "ESP32 Board Initialized... device id is: %s", CONFIG_PPM_DEVICE_ID);
+    ESP_LOGI(TAG, "ESP32 board initialized. Device id is: %s", iotDeviceId);
 
     startUpMutex = xSemaphoreCreateMutex();
 
     // initialize DS3231 realtime clock
     ds3231_status = ds3231_init();    
 
-    azure_client = init_iothub_client();
+    azure_client = init_iothub_client(iotDeviceId);
     if (azure_client == NULL)
     {
         ESP_LOGE(TAG, "APP INFO: No Azure IoT Hub Handle was obtained");                
@@ -299,7 +309,6 @@ void app_main()
     {   
          ESP_LOGE(TAG, "Create EnqueueHeartBeatStatusMsg task failed"); 
     }
-    
 
     //Low Medium Priority Task for displaying sensor data on OLED display
     taskResult = xTaskCreate(&show_sensor_task, "show_sensor_task", 1024 * 4 , NULL, 3, NULL); 

@@ -35,5 +35,6 @@ void oled_write_temp_header();
 void oled_write_temp_data();
 void oled_init();
 void oled_write_data(SamplingMessage* msg, int screenNo);
+void oled_wifi_config();
 
 #endif

@@ -49,6 +49,7 @@ static void eth_event_handler(void *arg, esp_event_base_t event_base,
         ESP_LOGI(TAG, "Ethernet Stopped");
         break;
     default:
+        ESP_LOGI(TAG, "Ethernet default event *****");
         break;
     }
 }

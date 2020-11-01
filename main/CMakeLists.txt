@@ -14,7 +14,8 @@ set(COMPONENT_SRCS "main.c"
                     "mc_ds3231.c"
                     "mc_eth.c"
                     "mc_iis328dq.c"
-                    "mc_ota.c")
+                    "mc_ota.c"
+                    "mc_web_server.c")
 
 set(COMPONENT_EMBED_TXTFILES "../cert/azure.cer")
 
@@ -23,3 +24,5 @@ list(APPEND COMPONENT_ADD_INCLUDEDIRS "."
                                       "../components")
 
 register_component()
+
+spiffs_create_partition_image(spiffs ../html FLASH_IN_PROJECT)

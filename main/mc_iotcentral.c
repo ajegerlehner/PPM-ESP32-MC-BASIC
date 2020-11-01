@@ -16,10 +16,11 @@
 
 #include "mc_device.h"
 
-const char * TAG = "IOTCENT";
+#define TAG  "IOTCENT"
 
 char *configBuffer = NULL;
 int bufferIdx = 0;
+
 
 esp_err_t clientEventHandler(esp_http_client_event_t *evt)
 {
@@ -54,9 +55,12 @@ esp_err_t clientEventHandler(esp_http_client_event_t *evt)
 
     return ESP_OK;
 }
-void get_device_config()
+void get_device_config(char *deviceId)
 {
-    const char *body = "{\"Name\":\"ppm-esp32dev01\",\"Secret\":\"i5SgyRr7hRQUalA3bkbCj34B6R2iNjFa\",\"Serial\":\"12345678901234567890\"}";
+    char body[200];
+    
+    memset(body, 0, sizeof(body));
+    sprintf(body, "{\"Name\":\"%s\",\"Secret\":\"%s\",\"Serial\":\"12345678901234567890\"}", deviceId, CONFIG_PPM_IOT_CENTRAL_SECRET);
     
     // configure client config - http request
     esp_http_client_config_t clientConfig = {

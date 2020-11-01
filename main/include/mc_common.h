@@ -25,6 +25,7 @@
 #define NVS_STORAGE_NS      "StoragePPM"
 #define NVS_SSID_TAG        "SSID"
 #define NVS_SSID_PWD_TAG    "SSIDPWD"
+#define NVS_NODENAME_TAG    "NODENAME"
 
 esp_err_t nvs_init();
 esp_err_t wifi_init();
@@ -35,6 +36,7 @@ esp_err_t nvs_write_str_value(char *keyName, char* writeString);
 esp_err_t nvs_read_uint32_value(char *keyName, uint32_t *ret_val);
 esp_err_t nvs_write_uint32_value(char *keyName, uint32_t val);
 esp_err_t nvs_delete_key(char *keyName);
+esp_err_t init_iotDeviceId();
 void incrementMsgReceived();
 void reboot_task(void *pvParameter);
 

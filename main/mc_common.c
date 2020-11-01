@@ -1,15 +1,27 @@
+/**
+ * Name:            mc_comon.c
+ * Description:     common functiuins to setup communications etc.
+ * Initial Date:    2020-10-31
+ * Author:          Andreas Jegerlehner
+ * Copyright:       (c) Print & Packaging GmbH. All rights reserved.
+**/
+
+#include "nvs_flash.h"
+#include "nvs.h"
+
 #include "mc_common.h"
 #include "mc_data.h"
 #include "mc_sensor_data.h"
-#include "nvs_flash.h"
-#include "nvs.h"
+#include "mc_oled_display.h"
+#include "mc_web_server.h"
+
 
 #define TAG "COMMON"
 
 // WiFi AP mode
 #define SSID_AP         "PPM-MC"
 #define SSID_AP_PWD     "12345678"
-#define SSID_AP_MAXCONN 1
+#define SSID_AP_MAXCONN 4
 #define SSID_AP_CHANNEL 0
 
 #define REBOOT_DELAY    10
@@ -24,6 +36,7 @@ static ip4_addr_t* esp32_ip_addr;
 
 extern DeviceStatus deviceStatus;
 extern SamplingMessage samplingMsg;
+extern char *iotDeviceId;
 
 
 /******************************************************************************
@@ -63,7 +76,7 @@ static esp_err_t esp32_event_handler(void *ctx, system_event_t *event)
             }
             else 
             {
-                ESP_LOGI(TAG,"Connection to the WiFi AP failure\n");
+                ESP_LOGE(TAG,"Connection to the WiFi AP failure\n");
             }
             break;
             
@@ -157,7 +170,7 @@ esp_err_t wifi_init()
 
 esp_err_t enter_config_mode()
 {
-    // no ssid and pwasword was previously saved in nvs
+    // no ssid and password was previously saved in nvs
     // enter WiFi AP mode to serve a web page to select WiFi
     // network
 
@@ -167,7 +180,8 @@ esp_err_t enter_config_mode()
             .password = SSID_AP_PWD,
             .max_connection = SSID_AP_MAXCONN,
             .channel = SSID_AP_CHANNEL,
-            .ssid_hidden = 0
+            .ssid_hidden = 0,
+            .authmode = WIFI_AUTH_OPEN
         }
     };
 
@@ -175,9 +189,17 @@ esp_err_t enter_config_mode()
     ESP_ERROR_CHECK(esp_wifi_set_config(ESP_IF_WIFI_AP, &wifi_config) );
     ESP_ERROR_CHECK(esp_wifi_start());
 
+    // setup web server to configure wifi settings
+    register_endpoints();
+
+    // display config ip adress on oled display
+    i2c_bus_init();
+    oled_init();
+    oled_wifi_config();
+
     while (1)
     {
-        vTaskDelay(ONE_SECOND_DELAY * 5);
+        vTaskDelay(ONE_SECOND_DELAY * 10);
         printf("Waiting for WiFi config...\n");
     }
     return ESP_OK;
@@ -349,6 +371,24 @@ esp_err_t nvs_delete_key(char *keyName)
     nvs_close(nvsHandle);
 
     ESP_LOGI(TAG, "NVS key %s successfully erased.", keyName);
+
+    return ESP_OK;
+}
+
+esp_err_t init_iotDeviceId()
+{
+    esp_err_t ret;
+    
+    // read iotDeviceId from nvs flash storage
+    ret = nvs_read_str_value(NVS_NODENAME_TAG, &iotDeviceId);
+    if (ret != ESP_OK)
+    {
+        wifi_init();
+        enter_config_mode();
+
+        // restart chip
+        esp_restart();
+    }
 
     return ESP_OK;
 }

@@ -17,7 +17,7 @@
 
 DeviceTwin currentDeviceTwin;
 
-IOTHUB_DEVICE_CLIENT_LL_HANDLE init_iothub_client()
+IOTHUB_DEVICE_CLIENT_LL_HANDLE init_iothub_client(char *deviceId)
 {
     DeviceConfig devConfig;
 
@@ -30,8 +30,8 @@ IOTHUB_DEVICE_CLIENT_LL_HANDLE init_iothub_client()
     }
 
     // get the device config from ppm iot central and provide connection string etc. 
-    get_device_config();
-    ESP_LOGI(TAG, "IoT Central device config loaded...");
+    get_device_config(deviceId);
+    ESP_LOGI(TAG, "IoT Central device config loaded for device %s", deviceId);
     
     // get device configuration struct for connection string
     devConfig = get_device_config_data();
@@ -325,7 +325,8 @@ int deviceMethodCallback(const char* method_name, const unsigned char* payload, 
     else if (strcmp("NVSCLEAR", strupr((char*)method_name)) == 0)
     {
         if (nvs_delete_key(NVS_SSID_TAG) == ESP_OK && 
-            nvs_delete_key(NVS_SSID_PWD_TAG) == ESP_OK)
+            nvs_delete_key(NVS_SSID_PWD_TAG) == ESP_OK &&
+            nvs_delete_key(NVS_NODENAME_TAG) == ESP_OK)
         {
             const char deviceMethodResponse[] = "{ \"Response\": \"WiFi keys erased.\" }";
             *response_size = sizeof(deviceMethodResponse)-1;
