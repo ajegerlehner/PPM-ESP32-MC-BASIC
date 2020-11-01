@@ -42,6 +42,14 @@
         sprintf(path, "/spiffs%s", req->uri);
     }
 
+    //style.css
+    char *ptr = strrchr(path, '.');
+    if (strcmp(ptr, ".css") == 0)
+    {
+        ESP_LOGI(TAG, "Service css - setting mime type to css");
+        httpd_resp_set_type(req, "text/css");
+    }
+
     // open file
     FILE *file = fopen(path, "r");
     if (file == NULL)
@@ -56,7 +64,7 @@
         {
             httpd_resp_sendstr_chunk(req, lineRead);
         }
-        httpd_resp_sendstr_chunk(req, NULL);        
+        httpd_resp_sendstr_chunk(req, NULL);              
     }
         
 
