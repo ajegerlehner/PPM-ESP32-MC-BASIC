@@ -93,18 +93,18 @@ void oled_write_data(SamplingMessage* msg, int screenNo)
     iot_ssd1306_refresh_gram(ssd1306_dev);
 }
 
-void oled_wifi_config()
+void oled_wifi_config(char *ipStr, char *apStr)
 {
     char oled_line[20] = {0};  
 
     sprintf(oled_line, "WIFI CONFIG");
-    iot_ssd1306_draw_string(ssd1306_dev, 0, 0, (const uint8_t *) oled_line, 12, 1);
-    sprintf(oled_line, "Open page");
-    iot_ssd1306_draw_string(ssd1306_dev, 0, 16, (const uint8_t *) oled_line, 12, 1);
-    sprintf(oled_line, "192.168.4.2/wifi");
-    iot_ssd1306_draw_string(ssd1306_dev, 0, 32, (const uint8_t *) oled_line, 12, 1);
-    sprintf(oled_line, "to configure WiFi.");
-    iot_ssd1306_draw_string(ssd1306_dev, 0, 48, (const uint8_t *) oled_line, 12, 1);
+    iot_ssd1306_draw_string(ssd1306_dev, 0, 0, (const uint8_t *) oled_line, 16, 1);
+    sprintf(oled_line, "AP:%s", apStr);
+    iot_ssd1306_draw_string(ssd1306_dev, 0, 16, (const uint8_t *) oled_line, 16, 1);
+    sprintf(oled_line, "IP:%s", ipStr);
+    iot_ssd1306_draw_string(ssd1306_dev, 0, 32, (const uint8_t *) oled_line, 16, 1);
+    sprintf(oled_line, "to config WiFi");
+    iot_ssd1306_draw_string(ssd1306_dev, 0, 48, (const uint8_t *) oled_line, 16, 1);
 
     iot_ssd1306_refresh_gram(ssd1306_dev);
 }

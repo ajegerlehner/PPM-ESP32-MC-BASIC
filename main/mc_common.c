@@ -173,6 +173,7 @@ esp_err_t enter_config_mode()
     // no ssid and password was previously saved in nvs
     // enter WiFi AP mode to serve a web page to select WiFi
     // network
+    char ipStr[16];
 
     wifi_config_t wifi_config = {
         .ap = {
@@ -185,6 +186,16 @@ esp_err_t enter_config_mode()
         }
     };
 
+    ESP_ERROR_CHECK(tcpip_adapter_dhcps_stop(TCPIP_ADAPTER_IF_AP));
+
+    tcpip_adapter_ip_info_t ip_info;
+    memset(&ip_info, 0, sizeof(ip_info));
+    IP4_ADDR(&(ip_info.ip), 192,168,1,99);
+    IP4_ADDR(&(ip_info.gw), 192,168,1,99);
+    IP4_ADDR(&(ip_info.netmask), 255,255,255,0);
+    ESP_ERROR_CHECK(tcpip_adapter_set_ip_info(TCPIP_ADAPTER_IF_AP, &ip_info));
+    ESP_ERROR_CHECK(tcpip_adapter_dhcps_start(TCPIP_ADAPTER_IF_AP));
+
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_AP));
     ESP_ERROR_CHECK(esp_wifi_set_config(ESP_IF_WIFI_AP, &wifi_config) );
     ESP_ERROR_CHECK(esp_wifi_start());
@@ -193,9 +204,10 @@ esp_err_t enter_config_mode()
     register_endpoints();
 
     // display config ip adress on oled display
+    sprintf(ipStr, IPSTR, IP2STR(&ip_info.ip));
     i2c_bus_init();
     oled_init();
-    oled_wifi_config();
+    oled_wifi_config(ipStr, SSID_AP);
 
     while (1)
     {

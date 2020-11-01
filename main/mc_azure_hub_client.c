@@ -341,7 +341,7 @@ int deviceMethodCallback(const char* method_name, const unsigned char* payload, 
                 ESP_LOGE(TAG, "Create reboot task failed"); 
             }
 
-            }
+        }
         else
         {
             const char deviceMethodResponse[] = "{ \"Response\": \"Error erasing WiFi keys.\" }";
