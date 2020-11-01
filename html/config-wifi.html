@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="/style.css">
+    <title>PPM-MC-IOT WiFi Config</title>
+</head>
+<body>
+    <section class="main-body">
+        <h1>Set WiFi parameters</h1>
+        <form action="/wifi-set" method="POST" enctype="text/plain">
+            <input type="text" name="nodename" placeholder="node name"/> <br>
+            <input type="text" name="ssid" placeholder="ssid" /> <br>
+            <input type="text" name="password" placeholder="password" /> <br>
+            <input type="submit" value="submit">
+        </form>
+    </section>    
+</body>
+</html>
