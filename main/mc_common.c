@@ -410,13 +410,30 @@ void incrementMsgReceived()
     deviceStatus.azureMsgReceived++;
 }
 
+void spawn_reboot_task(RebootStruct *reboot)
+{
+    BaseType_t taskResult;
+
+    // restart chip
+    // spawn reboot task
+    taskResult = xTaskCreate(&reboot_task, "reboot_task", 1024, reboot, 9, NULL); 
+    if (taskResult != pdPASS)
+    {   
+        ESP_LOGE(TAG, "Create reboot task failed"); 
+    }
+
+     return ESP_OK;
+}
+
 void reboot_task(void *pvParameter)
 {
+    RebootStruct *reboot = (RebootStruct *)pvParameter;
+    
 
     while(1)
     {
-        ESP_LOGE(TAG, "Rebooting chip in %d seconds.", REBOOT_DELAY);        
-        vTaskDelay(ONE_SECOND_DELAY * REBOOT_DELAY);
+        ESP_LOGE(TAG, "Rebooting chip in %d seconds.", reboot->rebootDelay);        
+        vTaskDelay(ONE_SECOND_DELAY * reboot->rebootDelay);
         esp_restart();
     }
     

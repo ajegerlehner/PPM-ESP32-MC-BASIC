@@ -77,6 +77,7 @@
  {
      char buf[150];
      BaseType_t taskResult;
+     RebootStruct reboot;
      
      ESP_LOGI(TAG, "WiFi set endpoint: web server url %s was hit. Content length: %d", req->uri, req->content_len);
      
@@ -109,11 +110,8 @@
 
     // restart chip
     // spawn reboot task
-    taskResult = xTaskCreate(&reboot_task, "reboot_task", 1024, NULL, 9, NULL); 
-    if (taskResult != pdPASS)
-    {   
-        ESP_LOGE(TAG, "Create reboot task failed"); 
-    }
+    reboot.rebootDelay = 10;
+    spawn_reboot_task(&reboot);
 
      return ESP_OK;
  }

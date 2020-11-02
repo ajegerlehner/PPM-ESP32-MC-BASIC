@@ -10,31 +10,16 @@ config PPM_IOT_CENTRAL_SECRET
 	help
 		Secret key to access the IoT Central web service api				
 			
-menu Button
-	config IOT_BUTTON_ENABLE
-		bool "Enable Button"
-		default y
-		help
-			Select to enable button
+config PPM_IOT_WIFI_MAX_RETRY
+	int "PPM IoT connect WiFi maximum retry count"
+	default 10
+	help
+		Maximum retry count to connect to WiFi network				
 
-	config BUTTON_USE_ESP_TIMER
-		bool "Use ESP Timer"
-		default y
-		
-	config IO_GLITCH_FILTER_TIME_MS
-		int "IO glitch filter timer ms (10~100)"
-		default 50
-		help
-			Please enter a decimal value. Fractions will not be accepted.  
-			Use the <TAB> key to move from the input field to the buttons below it. 
-
-	config IOT_DEBUG_ENABLE
-		bool "Enable IoT Debug"	
-
-	config IOT_LED_ENABLE
-		bool "Enable LED for Button"
-		default y
-
-endmenu
+config PPM_IOT_REBOOT_DELAY
+	int "PPM IoT reboot delay"
+	default 10
+	help
+		Delay in seconds before rebooting the chip				
 
 endmenu

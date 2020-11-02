@@ -61,7 +61,8 @@ char * assign_json_tag_str(cJSON *pl, const char * tag_name)
 
     ret = (char *) malloc(strlen(jsonTag->valuestring)+1);
     memcpy(ret, jsonTag->valuestring, strlen(jsonTag->valuestring));
-    memcpy(&ret[strlen(jsonTag->valuestring)+1], "\0",1);
+    //memcpy(&ret[strlen(jsonTag->valuestring)+1], "\0",1);
+    memcpy(&ret[strlen(jsonTag->valuestring)], "\0",1);
     
     return ret;
 }

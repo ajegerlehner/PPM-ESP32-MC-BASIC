@@ -306,21 +306,19 @@ int deviceMethodCallback(const char* method_name, const unsigned char* payload, 
 
     int result;
     BaseType_t taskResult;
+    RebootStruct reboot;
 
     if (strcmp("REBOOT", strupr((char*)method_name)) == 0)
     {
-        const char deviceMethodResponse[] = "{ \"Response\": \"1HGCM82633A004352\" }";
+        const char deviceMethodResponse[] = "{ \"Response\": \"Rebooting chip.\" }";
         *response_size = sizeof(deviceMethodResponse)-1;
         *response = malloc(*response_size);
         (void)memcpy(*response, deviceMethodResponse, *response_size);
         result = 200;
         
         // spawn reboot task
-        taskResult = xTaskCreate(&reboot_task, "reboot_task", 1024, NULL, 9, NULL); 
-        if (taskResult != pdPASS)
-        {   
-            ESP_LOGE(TAG, "Create reboot task failed"); 
-        }
+        reboot.rebootDelay = 10;
+        spawn_reboot_task(&reboot);
     }
     else if (strcmp("NVSCLEAR", strupr((char*)method_name)) == 0)
     {
@@ -335,12 +333,8 @@ int deviceMethodCallback(const char* method_name, const unsigned char* payload, 
             result = 200;
             
             // spawn reboot task
-            taskResult = xTaskCreate(&reboot_task, "reboot_task", 1024, NULL, 9, NULL); 
-            if (taskResult != pdPASS)
-            {   
-                ESP_LOGE(TAG, "Create reboot task failed"); 
-            }
-
+            reboot.rebootDelay = 10;
+            spawn_reboot_task(&reboot);
         }
         else
         {
@@ -348,7 +342,7 @@ int deviceMethodCallback(const char* method_name, const unsigned char* payload, 
             *response_size = sizeof(deviceMethodResponse)-1;
             *response = malloc(*response_size);
             (void)memcpy(*response, deviceMethodResponse, *response_size);
-            result = 1;
+            result = -1;
         }        
     }    
     else

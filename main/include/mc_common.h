@@ -18,7 +18,7 @@
 #define WIFI_CONNECTED_BIT BIT0
 #define ESP_WIFI_SSID CONFIG_WIFI_SSID
 #define ESP_WIFI_PASS CONFIG_WIFI_PASSWORD
-#define ESP_WIFI_MAXIMUM_RETRY CONFIG_WIFI_MAXIMUM_RETRY
+#define ESP_WIFI_MAXIMUM_RETRY CONFIG_PPM_IOT_WIFI_MAX_RETRY
 #define ESP_HOST_ADDR CONFIG_MQTT_BROKER_IP_ADDRESS
 #define ONE_SECOND_DELAY (1000 / portTICK_PERIOD_MS)
 
@@ -26,6 +26,11 @@
 #define NVS_SSID_TAG        "SSID"
 #define NVS_SSID_PWD_TAG    "SSIDPWD"
 #define NVS_NODENAME_TAG    "NODENAME"
+
+// reboot task
+typedef struct {
+    int rebootDelay;
+} RebootStruct;
 
 esp_err_t nvs_init();
 esp_err_t wifi_init();
@@ -38,6 +43,7 @@ esp_err_t nvs_write_uint32_value(char *keyName, uint32_t val);
 esp_err_t nvs_delete_key(char *keyName);
 esp_err_t init_iotDeviceId();
 void incrementMsgReceived();
+void spawn_reboot_task(RebootStruct *reboot);
 void reboot_task(void *pvParameter);
 
 #endif

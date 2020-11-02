@@ -19,12 +19,12 @@
 #include "mc_sensor_data.h"
 #include "mc_common.h"
 
-#define RESTART_DELAY 10000
+#define TAG "OTA"
 
-static const char* TAG = "OTA";
 extern const uint8_t server_cert_pem_start[] asm("_binary_azure_cer_start");
 extern DeviceStatus deviceStatus;
 extern SamplingMessage samplingMsg;
+extern DeviceConfig deviceConfig;
 
 esp_err_t client_event_handler(esp_http_client_event_t *evt)
 {
@@ -45,12 +45,16 @@ void performOTAUpdate(DeviceTwin* devTwin)
     if (esp_https_ota(&clientConfig) == ESP_OK)
     {
         // ota update succeeded
-        ESP_LOGI(TAG, "OTA update successfull to version %s - restarting in %d seconds.", devTwin->desiredSoftwareVersion, RESTART_DELAY / 1000);
-        create_status_msg(&deviceStatus, &samplingMsg, "OTA Update success");
+        ESP_LOGI(TAG, "OTA update successfull to version %s - restarting in %d seconds.", devTwin->desiredSoftwareVersion, 2 * deviceConfig.deviceToCloudInterval);
         time(&otaTime);
         nvs_write_uint32_value("lastOTAUpdate", otaTime);
-        vTaskDelay(pdMS_TO_TICKS(RESTART_DELAY));
-        esp_restart();
+        create_status_msg(&deviceStatus, &samplingMsg, "OTA Update success");
+        
+        RebootStruct reboot = {
+            .rebootDelay = 2 * deviceConfig.deviceToCloudInterval
+        };
+        
+        spawn_reboot_task(&reboot);
     }
 
     // ota update was not successfull

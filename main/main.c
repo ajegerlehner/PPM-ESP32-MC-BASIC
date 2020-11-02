@@ -177,10 +177,10 @@ void azure_task(void *pvParameter)
     deviceStatus.lastBootTime = now;
 
     // initialize sensor data struct
-    init_sensor_data(&samplingMsg, CONFIG_PPM_DEVICE_ID, "data");
+    init_sensor_data(&samplingMsg, deviceConfig.iotDeviceId, "data");
 
     // initialize status message struct
-    init_devicve_status(&deviceStatus, CONFIG_PPM_DEVICE_ID, "status");
+    init_devicve_status(&deviceStatus, deviceConfig.iotDeviceId, "status");
     
     // Create status message to send to Azure IoT
     enqueueStatusMsg(&deviceStatus, &samplingMsg, "Starting up.");
