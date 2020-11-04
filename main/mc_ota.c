@@ -21,10 +21,14 @@
 
 #define TAG "OTA"
 
+// defined in main.c
+void enqueueStatusMsg(DeviceStatus *statusMsg, SamplingMessage *samplingMsg, char *statusTxt);
+
 extern const uint8_t server_cert_pem_start[] asm("_binary_azure_cer_start");
 extern DeviceStatus deviceStatus;
 extern SamplingMessage samplingMsg;
 extern DeviceConfig deviceConfig;
+static RebootStruct reboot;
 
 esp_err_t client_event_handler(esp_http_client_event_t *evt)
 {
@@ -48,13 +52,15 @@ void performOTAUpdate(DeviceTwin* devTwin)
         ESP_LOGI(TAG, "OTA update successfull to version %s - restarting in %d seconds.", devTwin->desiredSoftwareVersion, 2 * deviceConfig.deviceToCloudInterval);
         time(&otaTime);
         nvs_write_uint32_value("lastOTAUpdate", otaTime);
-        create_status_msg(&deviceStatus, &samplingMsg, "OTA Update success");
+
+        // log OTA update event in device status log
+        enqueueStatusMsg(&deviceStatus, &samplingMsg, "OTA Update success");
+        vTaskDelay(ONE_SECOND_DELAY * 2 * deviceConfig.deviceToCloudInterval);
         
-        RebootStruct reboot = {
-            .rebootDelay = 2 * deviceConfig.deviceToCloudInterval
-        };
-        
+        // reboot chip
+        reboot.rebootDelay = CONFIG_PPM_IOT_REBOOT_DELAY;
         spawn_reboot_task(&reboot);
+        return;
     }
 
     // ota update was not successfull

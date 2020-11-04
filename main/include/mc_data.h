@@ -120,13 +120,6 @@ typedef enum TIME_TYPE
     Downtime
 } TimeType;
 
-static const char *timeTypeStr[] = {
-    "Stopped",
-    "Setuptime",
-    "Runtime",
-    "Downtime"
-};
-
 int serializeSamplingMessage(SamplingMessage* msg, char* jsonString);
 int serializeStatusgMessage(DeviceStatus *status, char *jsonString);
 void deserializeCounterReading(char *jsonStr, CounterReading *reading);

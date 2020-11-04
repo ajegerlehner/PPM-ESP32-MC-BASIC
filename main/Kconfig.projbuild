@@ -22,4 +22,10 @@ config PPM_IOT_REBOOT_DELAY
 	help
 		Delay in seconds before rebooting the chip				
 
+config PPM_IOT_HEARTBEAT_INTERVALL
+	int "PPM IoT heartbeat time interval"
+	default 600
+	help
+		Intervall seconds to send heartbeat status message to iot event hub
+
 endmenu

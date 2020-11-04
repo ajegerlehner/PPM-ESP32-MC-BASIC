@@ -66,8 +66,6 @@
         }
         httpd_resp_sendstr_chunk(req, NULL);              
     }
-        
-
 
      esp_vfs_spiffs_unregister(NULL);
      return ESP_OK;
@@ -101,7 +99,7 @@
     nvs_write_str_value(NVS_SSID_PWD_TAG, password);
     nvs_write_str_value(NVS_NODENAME_TAG, nodename);
 
-    ESP_LOGI(TAG, "Flashed new WiFi parameters to nvs: ssid: %s, password: %s, nade name: %s", ssid, password, nodename);
+    ESP_LOGI(TAG, "Flashed new WiFi parameters to nvs: ssid: %s, password: %s, node name: %s", ssid, password, nodename);
 
     // redirect to response page
     httpd_resp_set_status(req, "303");
@@ -110,7 +108,7 @@
 
     // restart chip
     // spawn reboot task
-    reboot.rebootDelay = 10;
+    reboot.rebootDelay = CONFIG_PPM_IOT_REBOOT_DELAY;
     spawn_reboot_task(&reboot);
 
      return ESP_OK;

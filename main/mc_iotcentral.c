@@ -94,6 +94,5 @@ void get_device_config(char *deviceId)
     
     // release client 
     esp_http_client_cleanup(client);
-
 }
 

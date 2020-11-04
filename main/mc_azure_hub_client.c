@@ -215,16 +215,15 @@ DeviceTwin* deviceTwinfromJSON(const char* jsonStr, DEVICE_TWIN_UPDATE_STATE upd
 void deviceTwinCallback(DEVICE_TWIN_UPDATE_STATE updateState, const unsigned char* payload, size_t size, void* userContextCallback)
 {
     //(void)userContextCallback;
-    printf("Payload: %s\n", payload);
     DeviceTwin* newTwin = deviceTwinfromJSON((const char*) payload, updateState);
 
     if (newTwin->desiredSoftwareVersion == NULL)
     {
-        ESP_LOGE(TAG, "Failed to parse New Twin JSON desired firmwareVersion. Skipping update.");
+        ESP_LOGE(TAG, "Failed to parse new twin JSON desired firmwareVersion. Skipping update.");
         return;
     }
 
-    ESP_LOGI(TAG, "Device Twin callback. New Twin firmwareVersion: %s, current firmwareVersion is %s",  newTwin->desiredSoftwareVersion, currentDeviceTwin.currentSoftwareVersion);
+    ESP_LOGI(TAG, "Device Twin callback. New twin firmwareVersion: %s, current firmwareVersion is %s",  newTwin->desiredSoftwareVersion, currentDeviceTwin.currentSoftwareVersion);
 
     if (newTwin == NULL)
     {

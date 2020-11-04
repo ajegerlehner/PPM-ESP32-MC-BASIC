@@ -39,8 +39,6 @@
 
 #define TAG "MAIN"
 
-#define HEARTBEAT_TIME_INTERVAL 600
-
 char *iotDeviceId;
 DeviceConfig deviceConfig;  
 SamplingMessage samplingMsg;
@@ -150,7 +148,7 @@ void enqueueHeartbeatStatusMsg(void *pvParameter)
     {
             enqueueStatusMsg(&deviceStatus, &samplingMsg, "Heartbeat.");
 
-            vTaskDelay(ONE_SECOND_DELAY * HEARTBEAT_TIME_INTERVAL);
+            vTaskDelay(ONE_SECOND_DELAY * CONFIG_PPM_IOT_HEARTBEAT_INTERVALL);
     }
 
     vTaskDelete(NULL);

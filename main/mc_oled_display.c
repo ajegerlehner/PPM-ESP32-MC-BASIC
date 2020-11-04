@@ -7,9 +7,16 @@
 #include "mc_i2c_bus.h"
 #include "mc_data.h"
 
+static const char *timeTypeStr[] = {
+    "Stopped",
+    "Setuptime",
+    "Runtime",
+    "Downtime"
+};
+
 static ssd1306_handle_t ssd1306_dev = NULL;
 
-static const char* OLED_TAG = "OLED";
+#define TAG "OLED"
 
 /**SSD1306 - OLED Display**/
 /******************************************************************************
@@ -20,7 +27,7 @@ static const char* OLED_TAG = "OLED";
 *******************************************************************************/
 esp_err_t ssd1306_show_signs(ssd1306_handle_t dev)
 {
-    ESP_LOGI(OLED_TAG, "Writing Header Symbols to SSD1306 OLED sensor");
+    ESP_LOGI(TAG, "Writing Header Symbols to SSD1306 OLED sensor");
 
     //iot_ssd1306_draw_bitmap(dev, 0, 2, &c_chSingal816[0], 16, 8);
     //iot_ssd1306_draw_bitmap(dev, 24, 2, &c_chBluetooth88[0], 8, 8);
@@ -45,7 +52,7 @@ void ssd1306_init()
     iot_ssd1306_clear_screen(ssd1306_dev, 0x00);
     ssd1306_show_signs(ssd1306_dev);
 
-    ESP_LOGI(OLED_TAG, "SSD1306 initialization completed");
+    ESP_LOGI(TAG, "SSD1306 initialization completed");
 }
 
 /******************************************************************************
@@ -60,7 +67,7 @@ void oled_init()
 
     ssd1306_init();
 
-    ESP_LOGI(OLED_TAG, "OLED initialization completed.");
+    ESP_LOGI(TAG, "OLED initialization completed.");
 }
 
 void oled_write_data(SamplingMessage* msg, int screenNo)
