@@ -47,6 +47,7 @@ char jsonSamplingMsg[AZURE_MSG_SIZE_MAX];
 char jsonStatusMsg[AZURE_MSG_SIZE_MAX];
 
 QueueHandle_t statusMsgQueue;
+QueueHandle_t telemetryQueue;
 
 SemaphoreHandle_t startUpMutex;
 
@@ -91,6 +92,7 @@ void board_init()
 
     // create queue for status messages
     statusMsgQueue = xQueueCreate(10, sizeof(DeviceStatus));
+    //telemetryQueue = xQueueCreate(5000, 600);
 }
 
 void enqueueStatusMsg(DeviceStatus *statusMsg, SamplingMessage *samplingMsg, char *statusTxt)

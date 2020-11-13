@@ -11,6 +11,8 @@
 #define MCP23017_MC_PIN             1
 #define MCP23017_WDT_PIN            4
 #define MCP23017_WDE_PIN            3
+#define MCP23017_LOWBAT_RED         7
+#define MCP23017_LOWBAT_GREEN       6
 
 // MCP23008 main board
 #define MCP23008_ADDR               0x24                // I2C slave address for MCP23008 chip (7-bit)

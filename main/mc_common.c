@@ -432,7 +432,7 @@ void reboot_task(void *pvParameter)
 
     while(1)
     {
-        ESP_LOGE(TAG, "Rebooting chip in %d seconds.", reboot->rebootDelay);        
+        ESP_LOGW(TAG, "Rebooting chip in %d seconds.", reboot->rebootDelay);        
         vTaskDelay(ONE_SECOND_DELAY * reboot->rebootDelay);
         esp_restart();
     }

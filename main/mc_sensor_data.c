@@ -113,6 +113,22 @@ void create_status_msg(DeviceStatus *status, SamplingMessage *samplingMsg, char 
     status->processorTemperature = ds3231_get_temperature();
 
     status->rtcBatteryLow = !ds3231_get_rtcBatteryStatus();
+    signal_bat_low_status(status->rtcBatteryLow);
+}
+
+void signal_bat_low_status(bool _batLow)
+{
+    if (_batLow)
+    {
+        mcp23017_set_pin(MCP23017_LOWBAT_RED, 1);
+        mcp23017_set_pin(MCP23017_LOWBAT_GREEN, 0);
+    }
+    else
+    {
+        mcp23017_set_pin(MCP23017_LOWBAT_RED, 0);
+        mcp23017_set_pin(MCP23017_LOWBAT_GREEN, 1);            
+    }
+    
 }
 
 void read_sensor_data(SamplingMessage *msg, DeviceConfig devConfig)

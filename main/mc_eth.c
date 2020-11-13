@@ -66,6 +66,7 @@ esp_err_t set_default_if(tcpip_adapter_if_t tcpip_if)
     
     ESP_LOGI(TAG, "Setting default netif interface to %s", _netif->hostname);
     netif_set_default(_netif);
+
     return ESP_OK;
 }
 
@@ -125,6 +126,7 @@ esp_err_t phy_init()
     ESP_ERROR_CHECK(esp_eth_start(eth_handle));    
     
     ESP_LOGI(TAG, "Ethernet adapter initialized.");
+    
     return ESP_OK;
 }
 

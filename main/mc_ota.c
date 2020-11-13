@@ -14,6 +14,7 @@
 #include "esp_http_client.h"
 #include "esp_https_ota.h"
 #include "esp_log.h"
+#include "esp_task_wdt.h"
 #include "mc_ota.h"
 #include "mc_data.h"
 #include "mc_sensor_data.h"
@@ -55,11 +56,14 @@ void performOTAUpdate(DeviceTwin* devTwin)
 
         // log OTA update event in device status log
         enqueueStatusMsg(&deviceStatus, &samplingMsg, "OTA Update success");
-        vTaskDelay(ONE_SECOND_DELAY * 2 * deviceConfig.deviceToCloudInterval);
         
         // reboot chip
-        reboot.rebootDelay = CONFIG_PPM_IOT_REBOOT_DELAY;
+        reboot.rebootDelay = 2 * deviceConfig.deviceToCloudInterval;
         spawn_reboot_task(&reboot);
+
+        // reset watch dog timer so it does not reboot the chip through watch dog timeout
+        esp_task_wdt_reset();
+
         return;
     }
 

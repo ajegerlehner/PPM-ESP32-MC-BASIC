@@ -21,6 +21,7 @@ void read_sensor_data(SamplingMessage *msg, DeviceConfig devConfig);
 float calc_speed(long counterDelta, long elapsedMS, float speedFactor);
 void read_bme280_data(SamplingMessage *msg);
 TimeType calc_timeType(float speed, DeviceConfig devCfg);
+void signal_bat_low_status(bool _batLow);
 
 #endif
 
