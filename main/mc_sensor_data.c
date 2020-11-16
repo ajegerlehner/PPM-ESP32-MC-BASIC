@@ -44,10 +44,12 @@ void init_sensor_hardware()
     ret = iot_bme280_init(dev);
     if (ret == ESP_OK)
     {
+        mcp23017_set_pin(MCP23017_ENVS_PIN, 1);
         ESP_LOGI(TAG, "BME280 initialized");
     }
     else
     {
+        mcp23017_set_pin(MCP23017_ENVS_PIN, 0);
         ESP_LOGE(TAG, "BME280 failed to initialize: return code %d", ret);
     }    
 
@@ -181,10 +183,12 @@ void read_sensor_data(SamplingMessage *msg, DeviceConfig devConfig)
     if (msg->timeType == Downtime)
     {
         mcp23008_set_pin(MCP23008_PLCOUT_PIN, 1);
+        mcp23017_set_pin(MCP23017_PLCOUT_PIN, 1);
     }
     else
     {
         mcp23008_set_pin(MCP23008_PLCOUT_PIN, 0);
+        mcp23017_set_pin(MCP23017_PLCOUT_PIN, 0);
     }
     
     
