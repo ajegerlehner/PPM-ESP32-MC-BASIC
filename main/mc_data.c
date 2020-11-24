@@ -17,7 +17,7 @@ int serializeSamplingMessage(SamplingMessage *msg, char *jsonString)
     json_object_set_string(root_object, "msgType", msg->msgType);
     json_object_set_number(root_object, "timeStamp", msg->timeStamp);
     json_object_set_number(root_object, "timeType", msg->timeType);
-    json_object_set_number(root_object, "elapsedTime", msg->elapseTime);
+    json_object_set_number(root_object, "elapseTime", msg->elapseTime);
     json_object_set_number(root_object, "speed", msg->speed);
     json_object_set_number(root_object, "tickCount1", msg->tickCount1);
     json_object_set_number(root_object, "tickCount2", msg->tickCount2);
