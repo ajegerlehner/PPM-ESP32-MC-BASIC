@@ -6,7 +6,8 @@
 #include "freertos/event_groups.h"
 #include "esp_system.h"
 #include "esp_wifi.h"
-#include "esp_event_loop.h"
+//#include "esp_event_loop.h"
+#include "esp_event.h"
 #include "esp_log.h"
 #include "nvs_flash.h"
 
@@ -21,6 +22,7 @@
 #define ESP_WIFI_MAXIMUM_RETRY CONFIG_PPM_IOT_WIFI_MAX_RETRY
 #define ESP_HOST_ADDR CONFIG_MQTT_BROKER_IP_ADDRESS
 #define ONE_SECOND_DELAY (1000 / portTICK_PERIOD_MS)
+#define ONE_MILLISECOND_DELAY (1 / portTICK_PERIOD_MS)
 
 #define NVS_STORAGE_NS      "StoragePPM"
 #define NVS_SSID_TAG        "SSID"
@@ -41,6 +43,7 @@ esp_err_t nvs_write_str_value(char *keyName, char* writeString);
 esp_err_t nvs_read_uint32_value(char *keyName, uint32_t *ret_val);
 esp_err_t nvs_write_uint32_value(char *keyName, uint32_t val);
 esp_err_t nvs_delete_key(char *keyName);
+esp_err_t nvs_read_spi_flash_size(char *flashSize);
 esp_err_t init_iotDeviceId();
 void incrementMsgReceived();
 void spawn_reboot_task(RebootStruct *reboot);

@@ -10,6 +10,7 @@
 #include "parson.h"
 #include "sdkconfig.h"
 #include "iothubtransportmqtt.h"
+#include "iothubtransportmqtt_websockets.h"
 #include "iothub_client_ll.h"
 #include "certs.h"
 

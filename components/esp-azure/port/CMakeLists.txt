@@ -71,6 +71,7 @@ set (COMPONENT_SRCS
 	"${AZURE_IOT_SDK}/iothub_client/src/iothub_message.c"
 	"${AZURE_IOT_SDK}/iothub_client/src/iothubtransport.c"
 	"${AZURE_IOT_SDK}/iothub_client/src/iothubtransportmqtt.c"
+	"${AZURE_IOT_SDK}/iothub_client/src/iothubtransportmqtt_websockets.c"
 	"${AZURE_IOT_SDK}/iothub_client/src/iothubtransport_mqtt_common.c"
 	"${AZURE_IOT_SDK}/iothub_client/src/iothub_transport_ll_private.c"
 	"${AZURE_IOT_SDK}/iothub_client/src/version.c"

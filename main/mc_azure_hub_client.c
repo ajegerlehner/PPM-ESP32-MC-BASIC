@@ -38,8 +38,10 @@ IOTHUB_DEVICE_CLIENT_LL_HANDLE init_iothub_client(char *deviceId)
     ESP_LOGI(TAG, "Device connection string is: %s", devConfig.deviceConnectionString);
     
     // Creating IoT Hub Client Handle from Connection String
+//    IOTHUB_DEVICE_CLIENT_LL_HANDLE iothub_deviceclient = 
+//                IoTHubDeviceClient_LL_CreateFromConnectionString(devConfig.deviceConnectionString, MQTT_Protocol);
     IOTHUB_DEVICE_CLIENT_LL_HANDLE iothub_deviceclient = 
-                IoTHubDeviceClient_LL_CreateFromConnectionString(devConfig.deviceConnectionString, MQTT_Protocol);
+                IoTHubDeviceClient_LL_CreateFromConnectionString(devConfig.deviceConnectionString, MQTT_WebSocket_Protocol);
     
     // Setting IoT Hub Device Client 
     // Enable verbose logging (e.g., for debugging).

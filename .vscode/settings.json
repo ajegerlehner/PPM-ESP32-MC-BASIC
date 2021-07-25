@@ -1,15 +1,24 @@
 {
-  "terminal.integrated.shell.windows": "cmd.exe",
-  "terminal.integrated.shellArgs.windows": ["/k", "C:\\esp\\esp-idf\\export.bat"],
   "terminal.integrated.shell.linux": "/bin/bash",
-  "terminal.integrated.shellArgs.linux": ["--init-file", "C:/esp/esp-idf/export.sh", "-i"],
+  "terminal.integrated.shellArgs.linux": ["--init-file", "c:/esp-idf/export.sh", "-i"],
   "terminal.integrated.shell.osx": "/bin/bash",
-  "terminal.integrated.shellArgs.osx": ["--init-file", "C:/esp/esp-idf/export.sh", "-i"],
+  "terminal.integrated.shellArgs.osx": ["--init-file", "c:/esp-idf/export.sh", "-i"],
   "files.associations": {
     "*.md": "markdown",
     "*.mdx": "tdx",
     "stdio.h": "c",
-    "ctime": "cpp"
+    "spiram.h": "c",
+    "mc_oled_display.h": "c",
+    "ssd1306_fonts.h": "c",
+    "iot_ssd1306.h": "c",
+    "iot_bme280.h": "c",
+    "mc_azure_hub_client.h": "c",
+    "iothubtransportmqtt.h": "c",
+    "iothub_transport_ll.h": "c",
+    "prov_transport_mqtt_client.h": "c",
+    "iothubtransportmqtt_websockets.h": "c"
   },
-  "git.ignoreLimitWarning": true
+ "git.ignoreLimitWarning": true,
+  "idf.portWin": "COM8",
+  "idf.flashType": "JTAG"
 }

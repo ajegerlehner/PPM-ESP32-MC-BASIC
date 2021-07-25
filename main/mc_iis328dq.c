@@ -45,7 +45,7 @@ esp_err_t iis328dq_init()
 	iis328dq_dev.port = I2C_MASTER_NUM;
 	iis328dq_dev.addr = IIS328DQ_ADDR;
 	
-	ESP_LOGI(TAG, "IIS328DQ Initializing...");
+	ESP_LOGI(TAG, "Device initializing...");
 
 	// read who am i register
 	ret = i2c_dev_read(&iis328dq_dev, &IIS328DQ_WHOAMI_REG, 1, &statusReg, sizeof(statusReg));
@@ -77,7 +77,7 @@ esp_err_t iis328dq_init()
 		ESP_LOGE(TAG, "Write REG4 failed.");
 	}
 
-    ESP_LOGI(TAG, "IIS328DQ Initialized.");
+    ESP_LOGI(TAG, "Device initialized.");
 
 	return ESP_OK;
 }

@@ -33,11 +33,13 @@
 #include "mc_iotcentral.h"
 #include "mc_gpio.h"
 #include "mc_device.h"
-#include "mc_mcp23071.h"
+#include "mc_mcp23008.h"
 #include "mc_stm32f04.h"
 #include "mc_ds3231.h"
 
 #define TAG "MAIN"
+
+#define OLED_SCREENS 9
 
 char *iotDeviceId;
 DeviceConfig deviceConfig;  
@@ -50,8 +52,11 @@ QueueHandle_t statusMsgQueue;
 QueueHandle_t telemetryQueue;
 
 SemaphoreHandle_t startUpMutex;
+SemaphoreHandle_t oledDisplayMutex;
 
 IOTHUB_DEVICE_CLIENT_LL_HANDLE azure_client;
+
+uint8_t currentOLEDScreen;
 
 // initialize the board and wifi connection
 void board_init()
@@ -69,6 +74,21 @@ void board_init()
     // initialize wifi connection
     ESP_ERROR_CHECK(wifi_init());
 
+    // setup GPIO ports
+    gpio_init();    
+
+    // check if NVS RESET pin is pressed - enter config mode
+    ESP_LOGI(TAG, "Checking NVS RESET pin.");
+    if (check_nvs_reset_pin())
+    {
+        ESP_LOGI(TAG, "NVS RESET pin pressed - entering config mode.");
+        enter_config_mode();
+    }
+    else
+    {
+        ESP_LOGI(TAG, "NVS RESET pin is low - continue normal operation.");
+    }
+
     // read iotDeviceId from nvs flash
     ESP_ERROR_CHECK(init_iotDeviceId());
 
@@ -77,9 +97,6 @@ void board_init()
     
     // initialize and setup OLED display
     oled_init(); 
-
-    // setup GPIO ports
-    gpio_init();    
     
     // initialize and setup MCP230XX port expanders
     mcp230xx_init();
@@ -89,6 +106,9 @@ void board_init()
 
     // initialize communication with STM32 microcontroller
     stm32_uart_install();
+
+    // signal end of boot process
+    mcp23008_signal_boot_end();
 
     // create queue for status messages
     statusMsgQueue = xQueueCreate(10, sizeof(DeviceStatus));
@@ -118,7 +138,7 @@ void azure_status_task(void *pvParameter)
             {
                 jsonLen = serializeStatusgMessage(&devStatus, jsonStatusMsg);
                 ESP_LOGI(TAG, "Azure Status Msg: %s", jsonStatusMsg);
-                mcp230xx_signal_pin(MCP23017_AZURE_PIN, MCP23008_AZURE_PIN, SIGNAL_PIN_DELAY);
+                mcp23008_signal_pin(MCP23008D_AZURE_PIN, MCP23008B_AZURE_PIN, SIGNAL_PIN_DELAY);
 
                 //Send status message to Azure IoT Hub
                 int sendresult = send_azure_msgs(jsonStatusMsg, azure_client);                
@@ -170,7 +190,7 @@ void azure_task(void *pvParameter)
     ESP_LOGI(TAG, "WDT initialized with %d seconds.", deviceConfig.watchdogTimeFence);
     esp_task_wdt_init(deviceConfig.watchdogTimeFence, true);
     esp_task_wdt_add(NULL);
-    mcp23017_set_pin(MCP23017_WDE_PIN, 1);
+    mcp23008d_set_pin(MCP23008D_WDE_PIN, 1);
 
     // boot time stamp
     time(&now);
@@ -189,7 +209,7 @@ void azure_task(void *pvParameter)
 
     while (1)
     {
-        // get sesnor data readings in sampling message        
+        // get sensor data readings in sampling message        
         read_sensor_data(&samplingMsg, deviceConfig);
         
         // Create message to send to Azure IoT
@@ -197,7 +217,7 @@ void azure_task(void *pvParameter)
         ESP_LOGI(TAG, "Azure Msg: %s", jsonSamplingMsg);
 
         //Send message to Azure IoT Hub
-        mcp230xx_signal_pin(MCP23017_AZURE_PIN, MCP23008_AZURE_PIN, SIGNAL_PIN_DELAY);
+        mcp23008_signal_pin(MCP23008D_AZURE_PIN, MCP23008B_AZURE_PIN, SIGNAL_PIN_DELAY);
 
         int sendresult = send_azure_msgs(jsonSamplingMsg, azure_client);                
         if (sendresult == 0)
@@ -214,7 +234,7 @@ void azure_task(void *pvParameter)
         vTaskDelay(ONE_SECOND_DELAY *2);
 
         // reset watchdog timer
-        mcp230xx_signal_pin(MCP23017_WDT_PIN, MCP23008_WDT_PIN, SIGNAL_PIN_DELAY);
+        mcp23008_signal_pin(MCP23008D_WDT_PIN, MCP23008B_WDT_PIN, SIGNAL_PIN_DELAY);
         esp_task_wdt_reset();
 
         //Delay for deviceToCloudInterval seconds
@@ -239,9 +259,46 @@ void show_sensor_task(void *pvParameter)
 
     while(1)
     {
-        oled_write_data(&samplingMsg, 0);
+        while (xSemaphoreTake(oledDisplayMutex, (TickType_t) 10) !=1);        
+        oled_write_data(&samplingMsg, &deviceStatus, currentOLEDScreen);        
+        xSemaphoreGive(oledDisplayMutex);
+
+        vTaskDelay(ONE_SECOND_DELAY *5);
+    }
+    
+    vTaskDelete(NULL);  
+}
+
+// task to detect gestures on TOF proximity sensor VL6180X
+void gesture_sensor_task(void *pvParameter)
+{
+    // wait for statup procedure to complete
+    while (xSemaphoreTake(startUpMutex, (TickType_t) 10) != 1);
+
+    // free mutex 
+    xSemaphoreGive(startUpMutex);
+
+    while(1)
+    {        
+        if (read_tof_gesture())
+        {
+            // gesture detected
+            currentOLEDScreen++;
+            if (currentOLEDScreen > OLED_SCREENS -1)
+                currentOLEDScreen = 0;     
+
+            ESP_LOGI(TAG, "TOF sensor gesture detected. Changing to screen %d.", currentOLEDScreen);   
+
+            // update OLED display immediately
+            while (xSemaphoreTake(oledDisplayMutex, (TickType_t) 10) !=1);
+            oled_write_data(&samplingMsg, &deviceStatus, currentOLEDScreen);
+            xSemaphoreGive(oledDisplayMutex);
+
+            // wait until no gesture in progress              
+            while (read_tof_gesture() == 1);
+        }
         
-        vTaskDelay(ONE_SECOND_DELAY *10);
+        vTaskDelay(ONE_MILLISECOND_DELAY *200);
     }
     
     vTaskDelete(NULL);  
@@ -252,12 +309,16 @@ void app_main()
 {
     int taskResult;    
     esp_err_t ds3231_status;
+
+    // set initial screen for OLED display
+    currentOLEDScreen = 0;
     
     board_init();
     vTaskDelay(ONE_SECOND_DELAY);
     ESP_LOGI(TAG, "ESP32 board initialized. Device id is: %s", iotDeviceId);
 
     startUpMutex = xSemaphoreCreateMutex();
+    oledDisplayMutex = xSemaphoreCreateMutex();
 
     // initialize DS3231 realtime clock
     ds3231_status = ds3231_init();    
@@ -274,7 +335,7 @@ void app_main()
         ds3231_init_time();
     }
 
-    // setup Azure Iot ebent hub device twin
+    // setup Azure Iot event hub device twin
     setupDeviceTwin(azure_client);
 
     // setup device callback methods
@@ -315,6 +376,13 @@ void app_main()
     if (taskResult != pdPASS)
     {   
         ESP_LOGE(TAG, "Create show sensor task failed"); 
+    }
+
+    //Low Priority Task for capturing gesture data
+    taskResult = xTaskCreate(&gesture_sensor_task, "gesture_sensor_task", 1024 * 3, NULL, 2, NULL); 
+    if (taskResult != pdPASS)
+    {   
+        ESP_LOGE(TAG, "Create gesture sensor task failed"); 
     }
 }
 

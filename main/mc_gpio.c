@@ -16,30 +16,19 @@
 
 void gpio_init()
 {
-    // setup LED pins
-    gpio_pad_select_gpio(OUTPUT_LED_PIN);
-    gpio_set_direction(OUTPUT_LED_PIN, GPIO_MODE_OUTPUT);
-    gpio_set_level(OUTPUT_LED_PIN, 0);
+    // setup NVS RESET input pin
+    gpio_pad_select_gpio(NVS_RESET_PIN);
+    gpio_set_direction(NVS_RESET_PIN, GPIO_MODE_INPUT);
 
-    gpio_pad_select_gpio(WATCHDOG_LED_PIN);
-    gpio_set_direction(WATCHDOG_LED_PIN, GPIO_MODE_OUTPUT);
-    gpio_set_level(WATCHDOG_LED_PIN, 0);
+}
 
-    gpio_pad_select_gpio(AZURE_LED_PIN);
-    gpio_set_direction(AZURE_LED_PIN, GPIO_MODE_OUTPUT);
-    gpio_set_level(AZURE_LED_PIN, 0);
+int check_nvs_reset_pin()
+{
+    int ret;
 
-    gpio_pad_select_gpio(MC328_LED_PIN);
-    gpio_set_direction(MC328_LED_PIN, GPIO_MODE_OUTPUT);
-    gpio_set_level(MC328_LED_PIN, 0);
+    ret = gpio_get_level(NVS_RESET_PIN);
 
-    gpio_pad_select_gpio(RTC_BAT_RED_LED_PIN);
-    gpio_set_direction(RTC_BAT_RED_LED_PIN, GPIO_MODE_OUTPUT);
-    gpio_set_level(RTC_BAT_RED_LED_PIN, 0);
-
-    gpio_pad_select_gpio(RTC_BAT_GREEN_LED_PIN);
-    gpio_set_direction(RTC_BAT_GREEN_LED_PIN, GPIO_MODE_OUTPUT);
-    gpio_set_level(RTC_BAT_GREEN_LED_PIN, 0);
+    return ret;
 }
 
 void signal_pin(int pin)

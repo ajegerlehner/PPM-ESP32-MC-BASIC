@@ -11,7 +11,7 @@
 #include "mc_data.h"
 #include "mc_stm32f04.h"
 
-#define TAG  "STM32F3"
+#define TAG  "STM32F4"
 #define ONE_SECOND_DELAY (1000 / portTICK_PERIOD_MS)
 
 #define UART_PIN_RX (GPIO_NUM_16)

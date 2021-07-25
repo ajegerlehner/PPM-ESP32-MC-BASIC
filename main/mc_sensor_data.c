@@ -15,17 +15,20 @@
 #include "mc_sensor_data.h"
 #include "mc_data.h"
 #include "mc_stm32f04.h"
-#include "mc_mcp23071.h"
+#include "mc_mcp23008.h"
 #include "mc_gpio.h"
 #include "mc_device.h"
 #include "mc_i2c_bus.h"
 #include "iot_bme280.h"
+#include "mc_si7021.h"
 #include "mc_ds3231.h"
 #include "mc_iis328dq.h"
+#include "mc_vl6180x.h"
 #include "mc_common.h"
 
 #define TAG "SENSOR"
 #define BME280_DELAY    300
+#define SI7021_DELAY    50
 #define MAX_STATUS_LEN  100
 #define MAX_SERIAL_LEN  30
 
@@ -34,6 +37,8 @@ const float BME280_SEALEVEL_PRESSURE = 1014.7f;
 static bme280_handle_t dev = NULL;
 static time_t lastTimeTypeCange;
 static TimeType currentTimeType;
+static uint8_t bme280_present;
+static uint8_t si7021_present;
 
 void init_sensor_hardware()
 {
@@ -44,20 +49,40 @@ void init_sensor_hardware()
     ret = iot_bme280_init(dev);
     if (ret == ESP_OK)
     {
-        mcp23017_set_pin(MCP23017_ENVS_PIN, 1);
+        mcp23008d_set_pin(MCP23008D_ENVS_PIN, 1);
         ESP_LOGI(TAG, "BME280 initialized");
+        bme280_present = 1;
     }
     else
     {
-        mcp23017_set_pin(MCP23017_ENVS_PIN, 0);
-        ESP_LOGE(TAG, "BME280 failed to initialize: return code %d", ret);
+        mcp23008d_set_pin(MCP23008D_ENVS_PIN, 0);
+        ESP_LOGE(TAG, "BME280 failed to initialize: return code %d. Disabling device.", ret);
+        bme280_present = 0;
     }    
+
+    if (!bme280_present)
+    {
+        ret = si7021_init();
+        if (ret == ESP_OK)
+        {   
+            mcp23008d_set_pin(MCP23008D_ENVS_PIN, 1);
+            ESP_LOGI(TAG, "SI7021 initialized");
+            si7021_present = 1;
+        }
+        else
+        {
+            mcp23008d_set_pin(MCP23008D_ENVS_PIN, 0);
+            ESP_LOGE(TAG, "SI7021 failed to initialize: return code %d. Disabling device.", ret);
+            si7021_present = 0;
+        }    
+    }
+
 
     // initialize IIS328DQ accelerometer / vibration sensor
     iis328dq_init();
     
     // initilize VL6180X gesture / proximity sensor
-
+    vl6180x_init();
 }
 
 void init_sensor_data(SamplingMessage *msg, char *deviceId, char *msgType)
@@ -122,13 +147,13 @@ void signal_bat_low_status(bool _batLow)
 {
     if (_batLow)
     {
-        mcp23017_set_pin(MCP23017_LOWBAT_RED, 1);
-        mcp23017_set_pin(MCP23017_LOWBAT_GREEN, 0);
+        mcp23008d_set_pin(MCP23008D_LOWBAT_RED, 1);
+        mcp23008d_set_pin(MCP23008D_LOWBAT_GREEN, 0);
     }
     else
     {
-        mcp23017_set_pin(MCP23017_LOWBAT_RED, 0);
-        mcp23017_set_pin(MCP23017_LOWBAT_GREEN, 1);            
+        mcp23008d_set_pin(MCP23008D_LOWBAT_RED, 0);
+        mcp23008d_set_pin(MCP23008D_LOWBAT_GREEN, 1);            
     }
     
 }
@@ -140,9 +165,7 @@ void read_sensor_data(SamplingMessage *msg, DeviceConfig devConfig)
     uint32_t freeHeapSize;
 
     // get counter readings in sampling message
-    //signal_pin(MC328_LED_PIN);
-    //mcp23017_signal_pin(MCP23017_MC_PIN, SIGNAL_PIN_DELAY);
-    mcp230xx_signal_pin(MCP23017_MC_PIN, MCP23008_MC_PIN, SIGNAL_PIN_DELAY);
+    mcp23008_signal_pin(MCP23008D_MC_PIN, MCP23008B_MC_PIN, SIGNAL_PIN_DELAY);
 
     time(&now);
     msg->timeStamp      = now;
@@ -182,17 +205,36 @@ void read_sensor_data(SamplingMessage *msg, DeviceConfig devConfig)
 
     if (msg->timeType == Downtime)
     {
-        mcp23008_set_pin(MCP23008_PLCOUT_PIN, 1);
-        mcp23017_set_pin(MCP23017_PLCOUT_PIN, 1);
+        mcp23008b_set_pin(MCP23008B_PLCOUT_PIN, 1);
+        mcp23008d_set_pin(MCP23008D_PLCOUT_PIN, 1);
     }
     else
     {
-        mcp23008_set_pin(MCP23008_PLCOUT_PIN, 0);
-        mcp23017_set_pin(MCP23017_PLCOUT_PIN, 0);
+        mcp23008b_set_pin(MCP23008B_PLCOUT_PIN, 0);
+        mcp23008d_set_pin(MCP23008D_PLCOUT_PIN, 0);
     }
     
     
-    read_bme280_data(msg);
+    // if BME280 is installed, use this sensor, otherwise try if SI7021 ist installed
+    if (bme280_present)
+    {
+        ESP_LOGI(TAG, "Reading BME280 environmental data...");
+        read_bme280_data(msg);
+    }
+    else if (si7021_present)
+    {
+        ESP_LOGI(TAG, "Reading SI7021 environmental data...");
+        read_si7021_data(msg);
+    }
+    else
+    {
+        ESP_LOGI(TAG, "No environmental data sensor available...");
+        msg->pressure = 0.0;
+        msg->temperature = 0.0;
+        msg->altitude = 0.0;
+        msg->humidity = 0.0;
+    }
+    
 
     iis328dq_read_data(msg);
 
@@ -216,6 +258,17 @@ void read_bme280_data(SamplingMessage *msg)
 
     msg->altitude = iot_bme280_read_altitude(dev, BME280_SEALEVEL_PRESSURE);
     vTaskDelay(BME280_DELAY / portTICK_RATE_MS);
+}
+
+void read_si7021_data(SamplingMessage *msg)
+{
+    msg->humidity = si7021_read_humidity();
+    vTaskDelay(SI7021_DELAY / portTICK_RATE_MS);
+
+    msg->temperature = si7021_read_temperature();
+
+    msg->pressure = 0.0;
+    msg->altitude = 0.0;
 }
 
 float calc_speed(long counterDelta, long elapsedMS, float speedFactor)
@@ -304,4 +357,14 @@ TimeType calc_timeType(float speed, DeviceConfig devCfg)
     }
 
     return currentTimeType;
+}
+
+uint8_t read_tof_gesture()
+{
+    uint8_t ret;
+
+    ret = vl6180x_gesture();
+
+    // ret = 1 - gesture detected, else ret = 0
+    return ret;
 }

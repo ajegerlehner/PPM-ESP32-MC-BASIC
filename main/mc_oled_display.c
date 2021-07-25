@@ -1,11 +1,13 @@
 /*Based on Espressif ESP32 Azure IoT Firmware code/example*/
 
 #include "ctype.h"
+#include "sys/time.h"
 #include "esp_log.h"
 #include "mc_oled_display.h"
 #include "iot_i2c_bus.h"
 #include "mc_i2c_bus.h"
 #include "mc_data.h"
+#include "mc_common.h"
 
 static const char *timeTypeStr[] = {
     "Stopped",
@@ -29,12 +31,12 @@ esp_err_t ssd1306_show_signs(ssd1306_handle_t dev)
 {
     ESP_LOGI(TAG, "Writing Header Symbols to SSD1306 OLED sensor");
 
-    //iot_ssd1306_draw_bitmap(dev, 0, 2, &c_chSingal816[0], 16, 8);
-    //iot_ssd1306_draw_bitmap(dev, 24, 2, &c_chBluetooth88[0], 8, 8);
+    //iot_ssd1306_draw_bitmap(dev, 111, 2, &c_chSingal816[0], 16, 8);
+    //iot_ssd1306_draw_bitmap(dev, 111, 2, &c_chBluetooth88[0], 8, 8);
     //iot_ssd1306_draw_bitmap(dev, 40, 2, &c_chMsg816[0], 16, 8);
     //iot_ssd1306_draw_bitmap(dev, 64, 2, &c_chGPRS88[0], 8, 8);
-    //iot_ssd1306_draw_bitmap(dev, 90, 2, &c_chSingal816[0], 16, 8);
-    iot_ssd1306_draw_bitmap(dev, 112, 2, &c_chBat816[0], 16, 8);
+    iot_ssd1306_draw_bitmap(dev, 111, 2, &c_chSingal816[0], 16, 8);
+    //iot_ssd1306_draw_bitmap(dev, 112, 2, &c_chBat816[0], 16, 8);
 
     return iot_ssd1306_refresh_gram(dev);
 }
@@ -70,9 +72,14 @@ void oled_init()
     ESP_LOGI(TAG, "OLED initialization completed.");
 }
 
-void oled_write_data(SamplingMessage* msg, int screenNo)
+void oled_write_data(SamplingMessage* msg, DeviceStatus* stat, int screenNo)
 {
     char oled_line[20] = {0};  
+    char timeBuf[30] = {0};
+    struct tm *OTAtime = NULL;
+    char strBuffer[12];
+    int upTimeDays, upTimeHrs, upTimeMin;
+
 
     switch (screenNo)
     {
@@ -85,14 +92,93 @@ void oled_write_data(SamplingMessage* msg, int screenNo)
         }
         sprintf(oled_line, "MsgNo:%9ld", msg->msgNum);
         iot_ssd1306_draw_string(ssd1306_dev, 0, 16, (const uint8_t *) oled_line, 16, 1);
-        sprintf(oled_line, "Cnt 1:%9ld", msg->tickCount1);
+        sprintf(oled_line, "Speed:%9.0f", msg->speed);
         iot_ssd1306_draw_string(ssd1306_dev, 0, 32, (const uint8_t *) oled_line, 16, 1);
         sprintf(oled_line, "TimeT:%9s", timeTypeStr[msg->timeType]);
         iot_ssd1306_draw_string(ssd1306_dev, 0, 48, (const uint8_t *) oled_line, 16, 1);
         break;
     case 1:
-        sprintf(oled_line, "TempC:%9.1f", msg->temperature);
+        sprintf(oled_line, "Cnt 1:%9ld", msg->tickCount1);
+        iot_ssd1306_draw_string(ssd1306_dev, 0, 16, (const uint8_t *) oled_line, 16, 1);
+        sprintf(oled_line, "Cnt 2:%9ld", msg->tickCount2);
+        iot_ssd1306_draw_string(ssd1306_dev, 0, 32, (const uint8_t *) oled_line, 16, 1);
+        sprintf(oled_line, "Cnt 3:%9ld", msg->tickCount3);
         iot_ssd1306_draw_string(ssd1306_dev, 0, 48, (const uint8_t *) oled_line, 16, 1);    
+        break;
+    case 2:
+        sprintf(oled_line, "Delt1:%9ld", msg->counterDelta1);
+        iot_ssd1306_draw_string(ssd1306_dev, 0, 16, (const uint8_t *) oled_line, 16, 1);
+        sprintf(oled_line, "Delt2:%9ld", msg->counterDelta2);
+        iot_ssd1306_draw_string(ssd1306_dev, 0, 32, (const uint8_t *) oled_line, 16, 1);
+        sprintf(oled_line, "Delt3:%9ld", msg->counterDelta3);
+        iot_ssd1306_draw_string(ssd1306_dev, 0, 48, (const uint8_t *) oled_line, 16, 1);    
+        break;
+    case 3:
+        sprintf(oled_line, "LogL1:%9d", msg->logicLevel1);
+        iot_ssd1306_draw_string(ssd1306_dev, 0, 16, (const uint8_t *) oled_line, 16, 1);
+        sprintf(oled_line, "LogL2:%9d", msg->logicLevel2);
+        iot_ssd1306_draw_string(ssd1306_dev, 0, 32, (const uint8_t *) oled_line, 16, 1);
+        sprintf(oled_line, "LogL3:%9d", msg->logicLevel2);
+        iot_ssd1306_draw_string(ssd1306_dev, 0, 48, (const uint8_t *) oled_line, 16, 1);    
+        break;
+    case 4:
+        sprintf(oled_line, "Humid:%9.1f", msg->humidity);
+        iot_ssd1306_draw_string(ssd1306_dev, 0, 16, (const uint8_t *) oled_line, 16, 1);
+        sprintf(oled_line, "Press:%9.1f", msg->pressure);
+        iot_ssd1306_draw_string(ssd1306_dev, 0, 32, (const uint8_t *) oled_line, 16, 1);    
+        sprintf(oled_line, "Altit:%9.1f", msg->altitude);
+        iot_ssd1306_draw_string(ssd1306_dev, 0, 48, (const uint8_t *) oled_line, 16, 1);
+        break;
+    case 5:
+        sprintf(oled_line, "FreeH:%9ld", msg->freeHeapSize);
+        iot_ssd1306_draw_string(ssd1306_dev, 0, 16, (const uint8_t *) oled_line, 16, 1);    
+        sprintf(oled_line, "TempC:%9.1f", msg->temperature);
+        iot_ssd1306_draw_string(ssd1306_dev, 0, 32, (const uint8_t *) oled_line, 16, 1);
+        sprintf(oled_line, "Stm32:%9.1f", msg->rtd_temperature);
+        iot_ssd1306_draw_string(ssd1306_dev, 0, 48, (const uint8_t *) oled_line, 16, 1);
+        break;
+    case 6:
+        sprintf(oled_line, "AzMsg:%9ld", stat->azureMsgSent);
+        iot_ssd1306_draw_string(ssd1306_dev, 0, 16, (const uint8_t *) oled_line, 16, 1);    
+        sprintf(oled_line, "AzCtD:%9ld", stat->azureMsgReceived);
+        iot_ssd1306_draw_string(ssd1306_dev, 0, 32, (const uint8_t *) oled_line, 16, 1);    
+        sprintf(oled_line, "RtcBt:%9d", stat->rtcBatteryLow);
+        iot_ssd1306_draw_string(ssd1306_dev, 0, 48, (const uint8_t *) oled_line, 16, 1);
+        break;
+    case 7:
+        OTAtime = localtime(&stat->lastOTAUpdate);
+
+        strftime(strBuffer, 12, "%d.%m.%Y", OTAtime);
+
+        ESP_LOGI(TAG, "OTA time: %s", strBuffer);
+
+        sprintf(oled_line, "AV:%s", stat->appVersion);
+        iot_ssd1306_draw_string(ssd1306_dev, 0, 16, (const uint8_t *) oled_line, 16, 1);
+
+        sprintf(oled_line, "OTAD:%9s", strBuffer);
+        iot_ssd1306_draw_string(ssd1306_dev, 0, 32, (const uint8_t *) oled_line, 16, 1);
+
+        strftime(strBuffer, 12, "%T", OTAtime);
+        sprintf(oled_line, "OTAT:%10s", strBuffer);
+        iot_ssd1306_draw_string(ssd1306_dev, 0, 48, (const uint8_t *) oled_line, 16, 1);
+        break;
+    case 8:
+        sprintf(oled_line, "HwRev:%9d", stat->hwRevision);
+        iot_ssd1306_draw_string(ssd1306_dev, 0, 16, (const uint8_t *) oled_line, 16, 1);
+        sprintf(oled_line, "Flash:%9s", CONFIG_ESPTOOLPY_FLASHSIZE);
+        iot_ssd1306_draw_string(ssd1306_dev, 0, 32, (const uint8_t *) oled_line, 16, 1);
+
+        upTimeDays = stat->upTime / (3600 * 24);
+        upTimeHrs = (stat->upTime - (upTimeDays * 3600 * 24)) / 3600;
+        upTimeMin = (stat->upTime % 3600) / 60;
+        sprintf(timeBuf, "UpTim:%2dd%2dh%2dm", upTimeDays, upTimeHrs, upTimeMin);
+        memset(oled_line, 0, 20);
+        strncpy(oled_line, timeBuf, 20);
+
+        ESP_LOGI(TAG, "UpTime: %2dd%2dh%2dm", upTimeDays, upTimeHrs, upTimeMin);
+
+        iot_ssd1306_draw_string(ssd1306_dev, 0, 48, (const uint8_t *) oled_line, 16, 1);    
+        break;
     default:
         break;
     }

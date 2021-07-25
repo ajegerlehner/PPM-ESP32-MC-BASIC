@@ -119,6 +119,7 @@ esp_err_t wifi_init()
 {
     char *ssid = NULL;
     char *ssid_pwd = NULL;
+    char *node_name = NULL;
     esp_err_t ret;
 
     //Initialize WiFi
@@ -130,22 +131,37 @@ esp_err_t wifi_init()
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
     ESP_ERROR_CHECK(esp_wifi_init(&cfg));
     
-    ret = nvs_read_str_value(NVS_SSID_TAG, &ssid);
-    if (ret != ESP_OK)
+    ret = nvs_read_str_value(NVS_NODENAME_TAG, &node_name);
+    if (ret != ESP_OK || strlen(node_name) == 0)
     {
         enter_config_mode();
 
         // restart chip
         esp_restart();
     }
+
+    ret = nvs_read_str_value(NVS_SSID_TAG, &ssid);
+    if (ret != ESP_OK)
+    {
+        // wifi not configured, exit wifi_init
+        return ESP_OK;
+
+        //enter_config_mode();
+
+        // restart chip
+        //esp_restart();
+    }
     
     ret = nvs_read_str_value(NVS_SSID_PWD_TAG, &ssid_pwd);
     if (ret != ESP_OK)
     {
-        enter_config_mode();
+        // wifi not configured, exit wifi_init
+        return ESP_OK;
+
+        //enter_config_mode();
         
         // restart chip
-        esp_restart();
+        //esp_restart();
     }
     
     wifi_config_t wifi_config = {
@@ -400,6 +416,20 @@ esp_err_t init_iotDeviceId()
 
         // restart chip
         esp_restart();
+    }
+
+    return ESP_OK;
+}
+
+esp_err_t nvs_read_spi_flash_size(char *flashSize)
+{
+    esp_err_t ret;
+    
+    // read spi flash size from nvs flash storage
+    ret = nvs_read_str_value(CONFIG_ESPTOOLPY_FLASHSIZE, flashSize);
+    if (ret != ESP_OK)
+    {
+        ESP_LOGE(TAG, "Error reading SPI flash size from config.");
     }
 
     return ESP_OK;
