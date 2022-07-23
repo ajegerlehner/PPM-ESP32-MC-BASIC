@@ -1,4 +1,4 @@
-set(COMPONENT_SRCS "mc_si7021.c" "mc_vl6081x.c" "main.c"
+set(COMPONENT_SRCS "mc_io_expander_hal.c" "mc_pca9554a.c" "mc_si7021.c" "mc_vl6081x.c" "main.c"
                     "mc_azure_hub_client.c"
                     "mc_common.c"
                     "mc_data.c"
@@ -16,8 +16,7 @@ set(COMPONENT_SRCS "mc_si7021.c" "mc_vl6081x.c" "main.c"
                     "mc_iis328dq.c"
                     "mc_ota.c"
                     "mc_web_server.c"
-                    "mc_vl6081x.c"
-                    "mc_si7021.c")
+                    )
 
 set(COMPONENT_EMBED_TXTFILES "../cert/azure.cer")
 

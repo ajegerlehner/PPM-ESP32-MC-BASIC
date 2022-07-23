@@ -78,7 +78,9 @@ typedef struct DEVICE_STATUS
     float processorTemperature;
     long heapSize;
     time_t lastOTAUpdate;
-
+    char* deviceIPAddress;
+    uint8_t wifiConnected;
+    uint8_t peripherialStatus;
 } DeviceStatus;
 
 typedef struct COUNTER_READING
@@ -123,5 +125,6 @@ typedef enum TIME_TYPE
 int serializeSamplingMessage(SamplingMessage* msg, char* jsonString);
 int serializeStatusgMessage(DeviceStatus *status, char *jsonString);
 void deserializeCounterReading(char *jsonStr, CounterReading *reading);
+float decRound3(float val);
 
 #endif

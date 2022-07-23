@@ -7,11 +7,18 @@
 #include "sdkconfig.h"
 #include "esp_log.h"
 #include "esp_ota_ops.h"
-
 #include "mc_common.h"
 #include "mc_iotcentral.h"
 #include "mc_device.h"
 #include "mc_ota.h"
+#include "mc_sensor_data.h"
+
+#ifdef CONFIG_PPM_IOT_MQTT
+    #include "iothubtransportmqtt.h"
+#endif // MQTT
+#ifdef CONFIG_PPM_IOT_MQTT_WEBSOCKETS
+    #include "iothubtransportmqtt_websockets.h"
+#endif // MQTT_OVER_WEBSOCKETS
 
 #define TAG "AUZURE_IOT"
 
@@ -20,6 +27,14 @@ DeviceTwin currentDeviceTwin;
 IOTHUB_DEVICE_CLIENT_LL_HANDLE init_iothub_client(char *deviceId)
 {
     DeviceConfig devConfig;
+    IOTHUB_CLIENT_TRANSPORT_PROVIDER protocol;
+
+#ifdef CONFIG_PPM_IOT_MQTT
+        protocol = MQTT_Protocol;
+#endif // Use MQTT protocol
+#ifdef CONFIG_PPM_IOT_MQTT_WEBSOCKETS
+        protocol = MQTT_WebSocket_Protocol;
+#endif // Use MQTT_OVER_WEBSOCKETS protocol
 
     // Initializing Iot Hub SDK
     int iotHubInitResult = IoTHub_Init();
@@ -38,10 +53,8 @@ IOTHUB_DEVICE_CLIENT_LL_HANDLE init_iothub_client(char *deviceId)
     ESP_LOGI(TAG, "Device connection string is: %s", devConfig.deviceConnectionString);
     
     // Creating IoT Hub Client Handle from Connection String
-//    IOTHUB_DEVICE_CLIENT_LL_HANDLE iothub_deviceclient = 
-//                IoTHubDeviceClient_LL_CreateFromConnectionString(devConfig.deviceConnectionString, MQTT_Protocol);
     IOTHUB_DEVICE_CLIENT_LL_HANDLE iothub_deviceclient = 
-                IoTHubDeviceClient_LL_CreateFromConnectionString(devConfig.deviceConnectionString, MQTT_WebSocket_Protocol);
+                IoTHubDeviceClient_LL_CreateFromConnectionString(devConfig.deviceConnectionString, protocol);
     
     // Setting IoT Hub Device Client 
     // Enable verbose logging (e.g., for debugging).
@@ -306,7 +319,6 @@ int deviceMethodCallback(const char* method_name, const unsigned char* payload, 
     (void)size;
 
     int result;
-    BaseType_t taskResult;
     RebootStruct reboot;
 
     if (strcmp("REBOOT", strupr((char*)method_name)) == 0)
@@ -346,8 +358,56 @@ int deviceMethodCallback(const char* method_name, const unsigned char* payload, 
             result = -1;
         }        
     }    
+    else if (strcmp("UPDATE", strupr((char*)method_name)) == 0)
+    {
+        if (nvs_delete_key(NVS_SSID_TAG) == ESP_OK && 
+            nvs_delete_key(NVS_SSID_PWD_TAG) == ESP_OK &&
+            nvs_delete_key(NVS_NODENAME_TAG) == ESP_OK)
+        {
+            const char deviceMethodResponse[] = "{ \"Response\": \"Firmware updated.\" }";
+            *response_size = sizeof(deviceMethodResponse)-1;
+            *response = malloc(*response_size);
+            (void)memcpy(*response, deviceMethodResponse, *response_size);
+            result = 200;
+            
+            // spawn reboot task
+            reboot.rebootDelay = 10;
+            spawn_reboot_task(&reboot);
+        }
+        else
+        {
+            const char deviceMethodResponse[] = "{ \"Response\": \"Error updating firmware.\" }";
+            *response_size = sizeof(deviceMethodResponse)-1;
+            *response = malloc(*response_size);
+            (void)memcpy(*response, deviceMethodResponse, *response_size);
+            result = -1;
+        }        
+    }    
+    else if (strcmp("NEWOPER", strupr((char*)method_name)) == 0) // new operation on sfdc terminal
+    {
+        setSetupTimeForced(1);
+        ESP_LOGI(TAG, "Setuptime forced set by cloud to device message. Payload: %s", payload); // todo correct string handling
+
+        const char deviceMethodResponse[] = "{ \"Response\": \"New operation id triggered.\" }";
+        *response_size = sizeof(deviceMethodResponse)-1;
+        *response = malloc(*response_size);
+        (void)memcpy(*response, deviceMethodResponse, *response_size);
+        result = 200;
+    }    
+    else if (strcmp("NOORDER", strupr((char*)method_name)) == 0) // new operation on sfdc terminal
+    {
+        setSetupTimeForced(0);
+        ESP_LOGI(TAG, "Downtime forced set by cloud to device message. Payload: %s", payload); // todo correct string handling
+
+        const char deviceMethodResponse[] = "{ \"Response\": \"New downtime operation id triggered.\" }";
+        *response_size = sizeof(deviceMethodResponse)-1;
+        *response = malloc(*response_size);
+        (void)memcpy(*response, deviceMethodResponse, *response_size);
+        result = 200;
+    }    
     else
     {
+        ESP_LOGW(TAG, "Unknown cloud to device message received.");
         // All other entries are ignored.
         const char deviceMethodResponse[] = "{ }";
         *response_size = sizeof(deviceMethodResponse)-1;

@@ -1,0 +1,15 @@
+Detecting C compiler ABI info failed to compile with the following output:
+Change Dir: C:/Users/ajege/source/repos/ppm-esp32-mc/CMakeFiles/CMakeTmp
+
+Run Build Command(s):nmake -f Makefile /nologo cmTC_869e8\fast && Das System kann die angegebene Datei nicht finden
+Generator: execution of make failed. Make command was: nmake -f Makefile /nologo cmTC_869e8\fast && 
+
+
+
+Determining if the C compiler works failed with the following output:
+Change Dir: C:/Users/ajege/source/repos/ppm-esp32-mc/CMakeFiles/CMakeTmp
+
+Run Build Command(s):nmake -f Makefile /nologo cmTC_5c0c0\fast && Das System kann die angegebene Datei nicht finden
+Generator: execution of make failed. Make command was: nmake -f Makefile /nologo cmTC_5c0c0\fast && 
+
+

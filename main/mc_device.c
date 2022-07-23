@@ -46,9 +46,11 @@ void deserializeDeviceConfig(char *jsonStr)
     deviceConfig.deviceToCloudInterval = assign_json_tag_uint16(payload, "deviceToCloudInterval");
     deviceConfig.cloudToDeviceInterval = assign_json_tag_uint16(payload, "cloudToDeviceInterval");
     deviceConfig.stoppedTimeFence = assign_json_tag_uint16(payload, "stoppedTimeFence");
+    deviceConfig.downtimeTimeFence = assign_json_tag_uint16(payload, "downTimeTimeFence");
     deviceConfig.setuptimeTimeFence = assign_json_tag_uint16(payload, "setuptimeTimefence");
     deviceConfig.runtimeTimeFence = assign_json_tag_uint16(payload, "runtimeTimeFence");
     deviceConfig.watchdogTimeFence = assign_json_tag_uint16(payload, "watchDogTimer");
+    
 
     // clean up memory
     cJSON_Delete(payload);

@@ -1,23 +1,25 @@
 #ifndef _MC_AZURE_HUB_CLIENT_H_
 #define _MC_AZURE_HUB_CLIENT_H_
 
-#include "azure_c_shared_utility/macro_utils.h"
-#include "azure_c_shared_utility/platform.h"
+#include "iothub.h"
 #include "iothub_device_client_ll.h"
 #include "iothub_client_options.h"
-#include "iothub.h"
 #include "iothub_message.h"
+#include "azure_c_shared_utility/threadapi.h"
+#include "azure_c_shared_utility/crt_abstractions.h"
+#include "azure_c_shared_utility/shared_util_options.h"
+
+#include "azure_c_shared_utility/macro_utils.h"
+#include "azure_c_shared_utility/platform.h"
+#include "iothub_client_options.h"
 #include "parson.h"
 #include "sdkconfig.h"
-#include "iothubtransportmqtt.h"
-#include "iothubtransportmqtt_websockets.h"
 #include "iothub_client_ll.h"
 #include "certs.h"
 
 #include "esp_log.h"
 
 #include "iothub_client_version.h"
-#include "azure_c_shared_utility/threadapi.h"
 #include "azure_c_shared_utility/tickcounter.h"
 #include "azure_c_shared_utility/shared_util_options.h"
 

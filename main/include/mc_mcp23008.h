@@ -24,9 +24,8 @@
 #define MCP23008B_PLCOUT_PIN         3
 
 
-void mcp230xx_init();
-void mcp23008d_init();
-void mcp23008b_init();
+int mcp23008d_init();
+int mcp23008b_init();
 
 void mcp23008d_set_pin(int _pin, int _pinValue);
 void mcp23008b_set_pin(int _pin, int _pinValue);

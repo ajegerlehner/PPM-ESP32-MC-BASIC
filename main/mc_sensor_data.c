@@ -25,12 +25,16 @@
 #include "mc_iis328dq.h"
 #include "mc_vl6180x.h"
 #include "mc_common.h"
+#include "mc_eth.h"
+#include "mc_io_expander_hal.h"
+#include "mc_data.h"
 
 #define TAG "SENSOR"
-#define BME280_DELAY    300
-#define SI7021_DELAY    50
-#define MAX_STATUS_LEN  100
-#define MAX_SERIAL_LEN  30
+#define BME280_DELAY        300
+#define SI7021_DELAY        50
+#define MAX_STATUS_LEN      100
+#define MAX_SERIAL_LEN      30
+#define MAX_IP_ADDRESS_LEN  16
 
 const float BME280_SEALEVEL_PRESSURE = 1014.7f;
 
@@ -39,6 +43,12 @@ static time_t lastTimeTypeCange;
 static TimeType currentTimeType;
 static uint8_t bme280_present;
 static uint8_t si7021_present;
+extern uint8_t wifiConnected;
+
+extern DeviceHWStatus deviceHWStatus;
+
+// flag to track setup time or new operation 
+uint8_t setupTimeForced = 1;
 
 void init_sensor_hardware()
 {
@@ -49,15 +59,15 @@ void init_sensor_hardware()
     ret = iot_bme280_init(dev);
     if (ret == ESP_OK)
     {
-        mcp23008d_set_pin(MCP23008D_ENVS_PIN, 1);
+        io_expander_set_pin(SIGNAL_PIN_ENVS, 1);
         ESP_LOGI(TAG, "BME280 initialized");
-        bme280_present = 1;
+        deviceHWStatus.bme280_present = 1;
     }
     else
     {
-        mcp23008d_set_pin(MCP23008D_ENVS_PIN, 0);
+        io_expander_set_pin(SIGNAL_PIN_ENVS, 0);
         ESP_LOGE(TAG, "BME280 failed to initialize: return code %d. Disabling device.", ret);
-        bme280_present = 0;
+        deviceHWStatus.bme280_present = 0;
     }    
 
     if (!bme280_present)
@@ -65,15 +75,15 @@ void init_sensor_hardware()
         ret = si7021_init();
         if (ret == ESP_OK)
         {   
-            mcp23008d_set_pin(MCP23008D_ENVS_PIN, 1);
+            io_expander_set_pin(SIGNAL_PIN_ENVS, 1);
             ESP_LOGI(TAG, "SI7021 initialized");
-            si7021_present = 1;
+            deviceHWStatus.si7021_present = 1;
         }
         else
         {
-            mcp23008d_set_pin(MCP23008D_ENVS_PIN, 0);
+            io_expander_set_pin(SIGNAL_PIN_ENVS, 0);
             ESP_LOGE(TAG, "SI7021 failed to initialize: return code %d. Disabling device.", ret);
-            si7021_present = 0;
+            deviceHWStatus.si7021_present = 0;
         }    
     }
 
@@ -104,6 +114,8 @@ void init_devicve_status(DeviceStatus *status, char *deviceId, char *msgType)
 
     status->statusMsg = malloc(MAX_STATUS_LEN);
     status->serialNo = malloc(MAX_SERIAL_LEN);
+
+    status->deviceIPAddress = malloc(MAX_IP_ADDRESS_LEN);
 }
 
 void create_status_msg(DeviceStatus *status, SamplingMessage *samplingMsg, char *statusTxt)
@@ -125,12 +137,16 @@ void create_status_msg(DeviceStatus *status, SamplingMessage *samplingMsg, char 
     status->upTime = esp_timer_get_time()/ 1000 / 1000;
     status->azureMsgSent = samplingMsg->msgNum;
     status->hwRevision = stm32_hw_revision_uart();  
+    status->peripherialStatus = deviceHWStatusToNum();
     status->appVersion = ota_app_desc->version;
     status->lastOTAUpdate = otaTime;
     
     // serial number is MAC adress of the esp32 chip
     esp_read_mac(macAdress, 0);
     sprintf(status->serialNo, "%x:%x:%x:%x:%x:%x", macAdress[0], macAdress[1], macAdress[2], macAdress[3], macAdress[4], macAdress[5]);
+
+    sprintf(status->deviceIPAddress, "%15s", getDeviceIPAddress());
+    status->wifiConnected = wifiConnected;
     
     strncpy(status->statusMsg, statusTxt, MAX_STATUS_LEN-1);
 
@@ -147,13 +163,13 @@ void signal_bat_low_status(bool _batLow)
 {
     if (_batLow)
     {
-        mcp23008d_set_pin(MCP23008D_LOWBAT_RED, 1);
-        mcp23008d_set_pin(MCP23008D_LOWBAT_GREEN, 0);
+        io_expander_set_pin(SIGNAL_PIN_LOWBAT_GREEN, 0);
+        io_expander_set_pin(SIGNAL_PIN_LOWBAT_RED, 1);
     }
     else
     {
-        mcp23008d_set_pin(MCP23008D_LOWBAT_RED, 0);
-        mcp23008d_set_pin(MCP23008D_LOWBAT_GREEN, 1);            
+        io_expander_set_pin(SIGNAL_PIN_LOWBAT_GREEN, 1);
+        io_expander_set_pin(SIGNAL_PIN_LOWBAT_RED, 0);
     }
     
 }
@@ -165,8 +181,7 @@ void read_sensor_data(SamplingMessage *msg, DeviceConfig devConfig)
     uint32_t freeHeapSize;
 
     // get counter readings in sampling message
-    mcp23008_signal_pin(MCP23008D_MC_PIN, MCP23008B_MC_PIN, SIGNAL_PIN_DELAY);
-
+    io_expander_signal_pin(SIGNAL_PIN_MC);
     time(&now);
     msg->timeStamp      = now;
 
@@ -205,23 +220,21 @@ void read_sensor_data(SamplingMessage *msg, DeviceConfig devConfig)
 
     if (msg->timeType == Downtime)
     {
-        mcp23008b_set_pin(MCP23008B_PLCOUT_PIN, 1);
-        mcp23008d_set_pin(MCP23008D_PLCOUT_PIN, 1);
+        io_expander_set_pin(SIGNAL_PIN_PLCOUT, 1);
     }
     else
     {
-        mcp23008b_set_pin(MCP23008B_PLCOUT_PIN, 0);
-        mcp23008d_set_pin(MCP23008D_PLCOUT_PIN, 0);
+        io_expander_set_pin(SIGNAL_PIN_PLCOUT, 0);
     }
     
     
     // if BME280 is installed, use this sensor, otherwise try if SI7021 ist installed
-    if (bme280_present)
+    if (deviceHWStatus.bme280_present)
     {
         ESP_LOGI(TAG, "Reading BME280 environmental data...");
         read_bme280_data(msg);
     }
-    else if (si7021_present)
+    else if (deviceHWStatus.si7021_present)
     {
         ESP_LOGI(TAG, "Reading SI7021 environmental data...");
         read_si7021_data(msg);
@@ -238,10 +251,10 @@ void read_sensor_data(SamplingMessage *msg, DeviceConfig devConfig)
 
     iis328dq_read_data(msg);
 
-     freeHeapSize = esp_get_free_heap_size();
-     msg->freeHeapSize = freeHeapSize;
+    freeHeapSize = esp_get_free_heap_size();
+    msg->freeHeapSize = freeHeapSize;
 
-     msg->rtd_temperature = ds3231_get_temperature();
+    msg->rtd_temperature = ds3231_get_temperature();
 
 }
 
@@ -271,14 +284,34 @@ void read_si7021_data(SamplingMessage *msg)
     msg->altitude = 0.0;
 }
 
+uint8_t deviceHWStatusToNum()
+{
+    // returns a coded value for the startup peripherial device status
+    return (deviceHWStatus.mcp23008d_present << 7)      // MSB
+        + (deviceHWStatus. mcp23008b_present << 6) 
+        + (deviceHWStatus.pca9554a_present << 5) 
+        + (deviceHWStatus.bme280_present << 4) 
+        + (deviceHWStatus.si7021_present << 3) 
+        + (deviceHWStatus.iis328dq_present << 2) 
+        + (deviceHWStatus.vl6180x_present << 1) 
+        + deviceHWStatus.wifi_connected;                // LSB
+}    
+
 float calc_speed(long counterDelta, long elapsedMS, float speedFactor)
 {
     float retVal;
 
     ESP_LOGI(TAG, "Speed calculation: counterDelta: %ld, elapsedMS: %ld, speedFactor: %f", counterDelta, elapsedMS, speedFactor);
 
-    retVal = 3600.0f / elapsedMS * 1000.0f * counterDelta * speedFactor; 
-    return retVal;
+    if (elapsedMS > 0)
+    {
+        retVal = 3600.0f / elapsedMS * 1000.0f * counterDelta * speedFactor; 
+    }
+    else 
+    {
+        retVal = 0.0;
+    }
+    return decRound3(retVal);
 }
 
 TimeType calc_timeType(float speed, DeviceConfig devCfg)
@@ -296,67 +329,86 @@ TimeType calc_timeType(float speed, DeviceConfig devCfg)
     {
         timeTypeDuration = currentTime - lastTimeTypeCange;
     }
-    
-    
 
-    ESP_LOGI(TAG, "TimeTypeDuration is: %d, current time type: %d", timeTypeDuration, currentTimeType);
+    ESP_LOGI(TAG, "TimeTypeDuration is: %d, current time type: %d, setupTimeForced: %d", timeTypeDuration, currentTimeType, setupTimeForced);
 
+    // if setupTimeForced is true, we always return Setuptime, unless Runtime was entered
+    if (setupTimeForced && (speed >= devCfg.runtimeRate) && (timeTypeDuration > devCfg.runtimeTimeFence))
+    {
+        setSetupTimeForced(0);
+        lastTimeTypeCange = currentTime;
+        currentTimeType = Runtime;
+        ESP_LOGI(TAG, "Setuptime forced reset: TimeTypeDuration is: %d, current time type: %d", timeTypeDuration, currentTimeType);
+        return currentTimeType;
+    }            
+    else if (setupTimeForced)
+    {        
+        currentTimeType = Setuptime;
+        return currentTimeType;
+    }
+
+    // if Setuptime is not forced, follow state transition logic
     switch (currentTimeType)
     {
-    case Stopped:
-    case Downtime:
-        if ((speed >= devCfg.setuptimeRate && speed <= devCfg.runtimeRate) && (timeTypeDuration > devCfg.setuptimeTimeFence))
-        {
-            lastTimeTypeCange = currentTime;
-            currentTimeType = Setuptime;
+        case Stopped:
+        case Downtime:
+            if ((speed >= devCfg.setuptimeRate && speed <= devCfg.runtimeRate) && (timeTypeDuration > devCfg.setuptimeTimeFence))
+            {
+                lastTimeTypeCange = currentTime;
+                currentTimeType = Setuptime;
+                return currentTimeType;
+            }
+            else if ((speed >= devCfg.runtimeRate) && (timeTypeDuration > devCfg.runtimeTimeFence))
+            {
+                lastTimeTypeCange = currentTime;
+                currentTimeType = Runtime;
+                return currentTimeType;
+            }
+            else if ((currentTimeType == Stopped) && (timeTypeDuration > devCfg.downtimeTimeFence))
+            {
+                currentTimeType = Downtime;
+                return currentTimeType;
+            }
+            break;
+        case Setuptime:
+            if ((speed < devCfg.setuptimeRate) && (timeTypeDuration > devCfg.setuptimeTimeFence))
+            {
+                lastTimeTypeCange = currentTime;
+                currentTimeType = Stopped;
+                return currentTimeType;
+            }
+            else if ((speed >= devCfg.runtimeRate) && (timeTypeDuration > devCfg.runtimeTimeFence))
+            {
+                lastTimeTypeCange = currentTime;
+                currentTimeType = Runtime;
+                return currentTimeType;
+            }
+            break;
+        case Runtime:
+            if ((speed < devCfg.runtimeRate && speed > devCfg.setuptimeRate) && (timeTypeDuration > devCfg.runtimeTimeFence))
+            {
+                lastTimeTypeCange = currentTime;
+                currentTimeType = Setuptime;
+                return currentTimeType;
+            }
+            else if (speed < devCfg.setuptimeRate && timeTypeDuration > devCfg.stoppedTimeFence)
+            {
+                lastTimeTypeCange = currentTime;
+                currentTimeType = Stopped;
+                return currentTimeType;
+            }
+            break;
+        default:
             return currentTimeType;
-        }
-        else if ((speed >= devCfg.runtimeRate) && (timeTypeDuration > devCfg.runtimeTimeFence))
-        {
-            lastTimeTypeCange = currentTime;
-            currentTimeType = Runtime;
-            return currentTimeType;
-        }
-        else if ((currentTimeType == Stopped) && (timeTypeDuration > devCfg.stoppedTimeFence))
-        {
-            currentTimeType = Downtime;
-            return currentTimeType;
-        }
-        break;
-    case Setuptime:
-        if ((speed < devCfg.setuptimeRate) && (timeTypeDuration > devCfg.setuptimeTimeFence))
-        {
-            lastTimeTypeCange = currentTime;
-            currentTimeType = Stopped;
-            return currentTimeType;
-        }
-        else if ((speed >= devCfg.runtimeRate) && (timeTypeDuration > devCfg.runtimeTimeFence))
-        {
-            lastTimeTypeCange = currentTime;
-            currentTimeType = Runtime;
-            return currentTimeType;
-        }
-        break;
-    case Runtime:
-        if ((speed < devCfg.runtimeRate && speed > devCfg.setuptimeRate) && (timeTypeDuration > devCfg.runtimeTimeFence))
-        {
-            lastTimeTypeCange = currentTime;
-            currentTimeType = Setuptime;
-            return currentTimeType;
-        }
-        else if (speed < devCfg.setuptimeRate && timeTypeDuration > devCfg.stoppedTimeFence)
-        {
-            lastTimeTypeCange = currentTime;
-            currentTimeType = Stopped;
-            return currentTimeType;
-        }
-        break;
-    default:
-        return currentTimeType;
-        break;
+            break;
     }
 
     return currentTimeType;
+}
+
+void setSetupTimeForced(uint8_t _val)
+{
+    setupTimeForced = _val;
 }
 
 uint8_t read_tof_gesture()

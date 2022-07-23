@@ -13,6 +13,7 @@ void i2c_bus_init()
     ESP_LOGI(TAG, "I2C initialization started.");
 
     i2c_config_t conf;
+    conf.clk_flags = 0;
     conf.mode = I2C_MODE_MASTER;
     conf.sda_io_num = (gpio_num_t)I2C_MASTER_SDA_IO;
     conf.sda_pullup_en = GPIO_PULLUP_DISABLE;

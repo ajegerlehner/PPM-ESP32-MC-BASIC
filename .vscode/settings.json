@@ -16,9 +16,15 @@
     "iothubtransportmqtt.h": "c",
     "iothub_transport_ll.h": "c",
     "prov_transport_mqtt_client.h": "c",
-    "iothubtransportmqtt_websockets.h": "c"
+    "iothubtransportmqtt_websockets.h": "c",
+    "mc_i2c_bus.h": "c",
+    "mc_common.h": "c",
+    "mc_device.h": "c",
+    "mc_mcp23008.h": "c"
   },
  "git.ignoreLimitWarning": true,
   "idf.portWin": "COM8",
-  "idf.flashType": "JTAG"
+  "idf.flashType": "JTAG",
+  "cmake.configureOnOpen": true,
+  "idf.adapterTargetName": "esp32"
 }

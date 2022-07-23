@@ -8,6 +8,7 @@
 
 #include <stdio.h>
 #include "driver/i2c.h"
+#include "mc_common.h"
 #include "mc_mcp23008.h"
 
 #define TAG "MCP23008"
@@ -20,13 +21,9 @@ const int8_t MCP23008_OLAT_CLEAR = 0x00;
 static int8_t mcp23008b_olat_register;			// onboard MCP23008
 static int8_t mcp23008d_olat_register;			// display shield MCP23008
 
-void mcp230xx_init()
-{
-	mcp23008d_init();							// display shield MCP23008
-	mcp23008b_init();							// onboard MCP23008
-}
+extern DeviceHWStatus deviceHWStatus;
 
-void mcp23008d_init()
+int mcp23008d_init()
 {
 	i2c_cmd_handle_t cmd = i2c_cmd_link_create();
 	int ret;
@@ -36,8 +33,8 @@ void mcp23008d_init()
 	// Initialize IODIRA register, set all ports to output
 	i2c_master_start(cmd);
 	i2c_master_write_byte(cmd, MCP23008D_ADDR << 1 | WRITE_BIT, ACK_CHECK_EN);
-	i2c_master_write_byte(cmd, MCP23008_IODIRA_REG, ACK_CHECK_EN);								// IODIRA
-	i2c_master_write_byte(cmd, MCP23008_IODIRA_CLEAR, ACK_CHECK_EN);								//Set all as outputs on A
+	i2c_master_write_byte(cmd, MCP23008_IODIRA_REG, ACK_CHECK_EN);					// IODIRA
+	i2c_master_write_byte(cmd, MCP23008_IODIRA_CLEAR, ACK_CHECK_EN);				//Set all as outputs on A
 	i2c_master_stop(cmd);
 	ret = i2c_master_cmd_begin(I2C_MASTER_NUM, cmd, 1000 / portTICK_RATE_MS);
 	i2c_cmd_link_delete(cmd);
@@ -45,6 +42,8 @@ void mcp23008d_init()
 	if (ret == ESP_FAIL) 
 	{
 		ESP_LOGE(TAG, "MCP23008 display shield init failed.");
+		ESP_LOGE(TAG, "MCP23008 display device disabled.");
+		return 0;
 	}
 
 	
@@ -54,7 +53,7 @@ void mcp23008d_init()
 	i2c_master_start(cmd);
 	i2c_master_write_byte(cmd, MCP23008D_ADDR << 1 | WRITE_BIT, ACK_CHECK_EN);
 	i2c_master_write_byte(cmd, MCP23008_OLAT_REG, ACK_CHECK_EN);
-	i2c_master_write_byte(cmd, MCP23008_OLAT_CLEAR, ACK_CHECK_EN);								// Clear OLAT register
+	i2c_master_write_byte(cmd, MCP23008_OLAT_CLEAR, ACK_CHECK_EN);					// Clear OLAT register
 	i2c_master_stop(cmd);
 	ret = i2c_master_cmd_begin(I2C_MASTER_NUM, cmd, 1000 / portTICK_RATE_MS);
 	i2c_cmd_link_delete(cmd);
@@ -62,6 +61,8 @@ void mcp23008d_init()
 	if (ret == ESP_FAIL) 
 	{
 		ESP_LOGE(TAG, "MCP23008 display shield init failed.");
+		ESP_LOGE(TAG, "MCP23008 display device disabled.");
+		return 0;
 	}
 
 	mcp23008d_olat_register = 0x00;
@@ -70,9 +71,11 @@ void mcp23008d_init()
 	{
 		ESP_LOGI(TAG, "MCP23008 display shield initialized.");
 	}
+
+	return 1;
 }
 
-void mcp23008b_init()
+int mcp23008b_init()
 {
 	i2c_cmd_handle_t cmd = i2c_cmd_link_create();
 	int ret;
@@ -82,8 +85,8 @@ void mcp23008b_init()
 	// Initialize IODIRA register, set all ports to output
 	i2c_master_start(cmd);
 	i2c_master_write_byte(cmd, MCP23008B_ADDR << 1 | WRITE_BIT, ACK_CHECK_EN);
-	i2c_master_write_byte(cmd, MCP23008_IODIRA_REG, ACK_CHECK_EN);								// IODIRA
-	i2c_master_write_byte(cmd, MCP23008_IODIRA_CLEAR, ACK_CHECK_EN);							//Set all as outputs on A
+	i2c_master_write_byte(cmd, MCP23008_IODIRA_REG, ACK_CHECK_EN);						// IODIRA
+	i2c_master_write_byte(cmd, MCP23008_IODIRA_CLEAR, ACK_CHECK_EN);					//Set all as outputs on A
 	i2c_master_stop(cmd);
 	ret = i2c_master_cmd_begin(I2C_MASTER_NUM, cmd, 1000 / portTICK_RATE_MS);
 	i2c_cmd_link_delete(cmd);
@@ -91,6 +94,8 @@ void mcp23008b_init()
 	if (ret == ESP_FAIL) 
 	{
 		ESP_LOGE(TAG, "MCP23008 onboard init failed.");
+		ESP_LOGE(TAG, "MCP23008 onboard device disabled.");
+		return 0;
 	}
 
 	
@@ -100,7 +105,7 @@ void mcp23008b_init()
 	i2c_master_start(cmd);
 	i2c_master_write_byte(cmd, MCP23008B_ADDR << 1 | WRITE_BIT, ACK_CHECK_EN);
 	i2c_master_write_byte(cmd, MCP23008_OLAT_REG, ACK_CHECK_EN);
-	i2c_master_write_byte(cmd, MCP23008_OLAT_CLEAR, ACK_CHECK_EN);								// Clear OLAT register
+	i2c_master_write_byte(cmd, MCP23008_OLAT_CLEAR, ACK_CHECK_EN);						// Clear OLAT register
 	i2c_master_stop(cmd);
 	ret = i2c_master_cmd_begin(I2C_MASTER_NUM, cmd, 1000 / portTICK_RATE_MS);
 	i2c_cmd_link_delete(cmd);
@@ -108,6 +113,8 @@ void mcp23008b_init()
 	if (ret == ESP_FAIL) 
 	{
 		ESP_LOGE(TAG, "MCP23008 onboard init failed.");
+		ESP_LOGE(TAG, "MCP23008 onboard device disabled.");
+		return 0;
 	}
 
 	mcp23008b_olat_register = 0x00;
@@ -116,12 +123,17 @@ void mcp23008b_init()
 	{
 		ESP_LOGI(TAG, "MCP23008 onboard initialized.");
 	}
+
+	return 1;
 }
 
 void mcp23008d_set_pin(int _pin, int _pinValue)
 {
 	i2c_cmd_handle_t cmd = i2c_cmd_link_create();
 	int ret;
+
+	if (!deviceHWStatus.mcp23008d_present)
+		return;
 
 	if (_pinValue == 0)
 	{
@@ -151,6 +163,9 @@ void mcp23008b_set_pin(int _pin, int _pinValue)
 	i2c_cmd_handle_t cmd = i2c_cmd_link_create();
 	int ret;
 
+	if (!deviceHWStatus.mcp23008b_present)
+		return;
+
 	if (_pinValue == 0)
 	{
 		mcp23008b_olat_register = clear_port_bit(mcp23008b_olat_register, _pin); 
@@ -176,6 +191,9 @@ void mcp23008b_set_pin(int _pin, int _pinValue)
 
 void mcp23008d_signal_pin(int _pin, int _delay)
 {
+	if (!deviceHWStatus.mcp23008d_present)
+		return;
+	
 	mcp23008d_set_pin(_pin, 1);
 	vTaskDelay (_delay / portTICK_PERIOD_MS);
 	mcp23008d_set_pin(_pin, 0);
@@ -183,6 +201,9 @@ void mcp23008d_signal_pin(int _pin, int _delay)
 
 void mcp23008b_signal_pin(int _pin, int _delay)
 {
+	if (!deviceHWStatus.mcp23008b_present)
+		return;
+
 	mcp23008b_set_pin(_pin, 1);
 	vTaskDelay (_delay / portTICK_PERIOD_MS);
 	mcp23008b_set_pin(_pin, 0);
@@ -190,15 +211,29 @@ void mcp23008b_signal_pin(int _pin, int _delay)
 
 void mcp23008_signal_pin(int _mcp23008d_pin, int _mcp23008b_pin, int _delay)
 {
-	mcp23008d_set_pin(_mcp23008d_pin, 1);
-	mcp23008b_set_pin(_mcp23008b_pin, 1);
+	ESP_LOGI(TAG, "MCP23008 io expander display present: %d", deviceHWStatus.mcp23008d_present);
+    ESP_LOGI(TAG, "MCP23008 io expander board present: %d", deviceHWStatus.mcp23008b_present);
+
+	if (deviceHWStatus.mcp23008d_present)
+		mcp23008d_set_pin(_mcp23008d_pin, 1);
+
+	if (deviceHWStatus.mcp23008b_present)
+		mcp23008b_set_pin(_mcp23008b_pin, 1);
+
 	vTaskDelay (_delay / portTICK_PERIOD_MS);
-	mcp23008d_set_pin(_mcp23008d_pin, 0);
-	mcp23008b_set_pin(_mcp23008b_pin, 0);
+
+	if (deviceHWStatus.mcp23008d_present)
+		mcp23008d_set_pin(_mcp23008d_pin, 0);
+
+	if (deviceHWStatus.mcp23008b_present)
+		mcp23008b_set_pin(_mcp23008b_pin, 0);
 }
 
 void mcp23008_signal_boot_end()
 {
+	if (!deviceHWStatus.mcp23008b_present)
+		return;
+
 	mcp23008b_signal_pin(MCP23008B_MC_PIN, 250);
 	mcp23008b_signal_pin(MCP23008B_AZURE_PIN, 250);
 	mcp23008b_signal_pin(MCP23008B_WDT_PIN, 250);

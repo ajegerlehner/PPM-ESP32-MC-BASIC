@@ -22,7 +22,13 @@
 
 #define TAG "PHY"
 
+#define MAX_IPADDRESS_LEN 16
+
 esp_err_t set_default_if(tcpip_adapter_if_t tcpip_if);
+
+extern char* deviceIPAddress;
+extern int internetConnected;
+extern uint8_t wifiConnected;
 
 /** Event handler for Ethernet events */
 static void eth_event_handler(void *arg, esp_event_base_t event_base,
@@ -96,6 +102,14 @@ static void got_ip_event_handler(void *arg, esp_event_base_t event_base,
     }
     
     ESP_LOGI(TAG, "Ethernet IP address: " IPSTR " Mask: " IPSTR " Gwy: " IPSTR, IP2STR(&ip_info->ip), IP2STR(&ip_info->netmask), IP2STR(&ip_info->gw));
+
+    if (!deviceIPAddress)
+    {
+        deviceIPAddress = malloc(sizeof(char)* MAX_IPADDRESS_LEN);
+        sprintf(deviceIPAddress, IPSTR, IP2STR(&ip_info->ip));
+        internetConnected = 1;     
+        wifiConnected = 0; 
+    }
 }
 
 esp_err_t phy_init()
@@ -128,6 +142,17 @@ esp_err_t phy_init()
     ESP_LOGI(TAG, "Ethernet adapter initialized.");
     
     return ESP_OK;
+}
+
+char* getDeviceIPAddress()
+{
+    if (!deviceIPAddress)
+    {
+        deviceIPAddress = malloc(sizeof(char)* MAX_IPADDRESS_LEN);
+        sprintf(deviceIPAddress, "%15s", "UNKNOWN");
+    }
+
+    return deviceIPAddress;
 }
 
 

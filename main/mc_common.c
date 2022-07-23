@@ -8,6 +8,8 @@
 
 #include "nvs_flash.h"
 #include "nvs.h"
+#include "esp_int_wdt.h"
+#include "esp_task_wdt.h"
 
 #include "mc_common.h"
 #include "mc_data.h"
@@ -23,7 +25,7 @@
 #define SSID_AP_PWD     "12345678"
 #define SSID_AP_MAXCONN 4
 #define SSID_AP_CHANNEL 0
-
+#define MAX_IPADDRESS_LEN 16
 #define REBOOT_DELAY    10
 
 //Declare static prototype
@@ -36,8 +38,11 @@ static ip4_addr_t* esp32_ip_addr;
 
 extern DeviceStatus deviceStatus;
 extern SamplingMessage samplingMsg;
-extern char *iotDeviceId;
 
+extern char *iotDeviceId;
+extern char *deviceIPAddress;
+extern int internetConnected;
+extern uint8_t wifiConnected;
 
 /******************************************************************************
  * FunctionName : esp32_event_handler
@@ -57,6 +62,13 @@ static esp_err_t esp32_event_handler(void *ctx, system_event_t *event)
             break;
 
         case SYSTEM_EVENT_STA_GOT_IP:
+           if (!deviceIPAddress)
+            {
+                deviceIPAddress = malloc(sizeof(char)* MAX_IPADDRESS_LEN);
+                sprintf(deviceIPAddress, "%15s", ip4addr_ntoa(&event->event_info.got_ip.ip_info.ip));
+                internetConnected = 1;
+                wifiConnected = 1;
+            }
             ESP_LOGI(TAG, "got ip:%s",
                     ip4addr_ntoa(&event->event_info.got_ip.ip_info.ip));
             esp32_ip_addr = &event->event_info.got_ip.ip_info.ip;	
@@ -451,21 +463,19 @@ void spawn_reboot_task(RebootStruct *reboot)
     {   
         ESP_LOGE(TAG, "Create reboot task failed"); 
     }
-
-     return ESP_OK;
 }
 
 void reboot_task(void *pvParameter)
 {
     RebootStruct *reboot = (RebootStruct *)pvParameter;
     
+    ESP_LOGW(TAG, "Rebooting chip in %d seconds.", reboot->rebootDelay);        
 
-    while(1)
-    {
-        ESP_LOGW(TAG, "Rebooting chip in %d seconds.", reboot->rebootDelay);        
-        vTaskDelay(ONE_SECOND_DELAY * reboot->rebootDelay);
-        esp_restart();
-    }
+    // trigger watchdog reset
+    esp_task_wdt_init(reboot->rebootDelay,true);
+    esp_task_wdt_add(NULL);
+    while(true);
     
+    // this will never be hit
     vTaskDelete(NULL);  
 }

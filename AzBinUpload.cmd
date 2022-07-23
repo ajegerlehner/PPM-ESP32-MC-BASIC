@@ -1,0 +1,2 @@
+az storage blob upload --container-name firmware --account-name ppmiotfirmware --account-key Bqf2HrIB5JytFInLVo4SQsl+PBYQ+QK3UU7m5sUxNHR8Ncb2P93MwJltXMVd+/NqIfVzam7OCqsCSyy0BrnsDQ== --name ppm-esp32-mc.bin --file C:\Users\ajege\source\repos\ppm-esp32-mc\build\ppm-esp32-mc.bin
+az storage blob list --container-name firmware --account-name ppmiotfirmware --account-key Bqf2HrIB5JytFInLVo4SQsl+PBYQ+QK3UU7m5sUxNHR8Ncb2P93MwJltXMVd+/NqIfVzam7OCqsCSyy0BrnsDQ==

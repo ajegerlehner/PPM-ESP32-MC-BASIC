@@ -30,9 +30,21 @@
 #define NVS_NODENAME_TAG    "NODENAME"
 
 // reboot task
-typedef struct {
+typedef struct rebootStruct {
     int rebootDelay;
 } RebootStruct;
+
+// device peripherials status
+typedef struct deviceHWStruct {
+    uint8_t mcp23008d_present;
+    uint8_t mcp23008b_present;
+    uint8_t pca9554a_present;
+    uint8_t bme280_present;
+    uint8_t si7021_present;
+    uint8_t iis328dq_present;
+    uint8_t vl6180x_present;
+    uint8_t wifi_connected;
+} DeviceHWStatus;
 
 esp_err_t nvs_init();
 esp_err_t wifi_init();

@@ -33,18 +33,25 @@
 #include "mc_iotcentral.h"
 #include "mc_gpio.h"
 #include "mc_device.h"
-#include "mc_mcp23008.h"
 #include "mc_stm32f04.h"
 #include "mc_ds3231.h"
+#include "mc_io_expander_hal.h"
 
 #define TAG "MAIN"
 
-#define OLED_SCREENS 9
+#define OLED_SCREENS 10
+#define MAX_IP_RETRYS 20
 
-char *iotDeviceId;
+char *iotDeviceId;          // global iot device id
+char *deviceIPAddress;      // global ip adress
+int  internetConnected = 0; // global flag for ip adress received
+uint8_t wifiConnected = 0;  // global flag for connection type
+
 DeviceConfig deviceConfig;  
 SamplingMessage samplingMsg;
 DeviceStatus deviceStatus;
+DeviceHWStatus deviceHWStatus;
+
 char jsonSamplingMsg[AZURE_MSG_SIZE_MAX];
 char jsonStatusMsg[AZURE_MSG_SIZE_MAX];
 
@@ -57,6 +64,17 @@ SemaphoreHandle_t oledDisplayMutex;
 IOTHUB_DEVICE_CLIENT_LL_HANDLE azure_client;
 
 uint8_t currentOLEDScreen;
+
+void log_startup_device_status()
+{
+    ESP_LOGI(TAG, "MCP23008 io expander display present: %d", deviceHWStatus.mcp23008d_present);
+    ESP_LOGI(TAG, "MCP23008 io expander board present: %d", deviceHWStatus.mcp23008b_present);
+    ESP_LOGI(TAG, "PCA9554A io expander display present: %d", deviceHWStatus.pca9554a_present);
+    ESP_LOGI(TAG, "BME280 sensor present: %d", deviceHWStatus.bme280_present);
+    ESP_LOGI(TAG, "SI7021 sensor present: %d", deviceHWStatus.si7021_present);
+    ESP_LOGI(TAG, "IIS328DQ sesnor present: %d", deviceHWStatus.iis328dq_present);
+    ESP_LOGI(TAG, "VL6180X sensor present: %d", deviceHWStatus.vl6180x_present);
+}
 
 // initialize the board and wifi connection
 void board_init()
@@ -98,8 +116,8 @@ void board_init()
     // initialize and setup OLED display
     oled_init(); 
     
-    // initialize and setup MCP230XX port expanders
-    mcp230xx_init();
+    // initialize port expanders
+    io_expander_init();
 
     // initialize sensor data structures
     init_sensor_hardware();
@@ -108,11 +126,13 @@ void board_init()
     stm32_uart_install();
 
     // signal end of boot process
-    mcp23008_signal_boot_end();
+    io_expander_signal_boot_end();
 
     // create queue for status messages
     statusMsgQueue = xQueueCreate(10, sizeof(DeviceStatus));
     //telemetryQueue = xQueueCreate(5000, 600);
+
+        log_startup_device_status();
 }
 
 void enqueueStatusMsg(DeviceStatus *statusMsg, SamplingMessage *samplingMsg, char *statusTxt)
@@ -138,7 +158,7 @@ void azure_status_task(void *pvParameter)
             {
                 jsonLen = serializeStatusgMessage(&devStatus, jsonStatusMsg);
                 ESP_LOGI(TAG, "Azure Status Msg: %s", jsonStatusMsg);
-                mcp23008_signal_pin(MCP23008D_AZURE_PIN, MCP23008B_AZURE_PIN, SIGNAL_PIN_DELAY);
+                io_expander_signal_pin(SIGNAL_PIN_AZURE);
 
                 //Send status message to Azure IoT Hub
                 int sendresult = send_azure_msgs(jsonStatusMsg, azure_client);                
@@ -190,7 +210,7 @@ void azure_task(void *pvParameter)
     ESP_LOGI(TAG, "WDT initialized with %d seconds.", deviceConfig.watchdogTimeFence);
     esp_task_wdt_init(deviceConfig.watchdogTimeFence, true);
     esp_task_wdt_add(NULL);
-    mcp23008d_set_pin(MCP23008D_WDE_PIN, 1);
+    io_expander_set_pin(SIGNAL_PIN_WDE, 1);
 
     // boot time stamp
     time(&now);
@@ -217,7 +237,7 @@ void azure_task(void *pvParameter)
         ESP_LOGI(TAG, "Azure Msg: %s", jsonSamplingMsg);
 
         //Send message to Azure IoT Hub
-        mcp23008_signal_pin(MCP23008D_AZURE_PIN, MCP23008B_AZURE_PIN, SIGNAL_PIN_DELAY);
+        io_expander_signal_pin(SIGNAL_PIN_AZURE);
 
         int sendresult = send_azure_msgs(jsonSamplingMsg, azure_client);                
         if (sendresult == 0)
@@ -234,7 +254,7 @@ void azure_task(void *pvParameter)
         vTaskDelay(ONE_SECOND_DELAY *2);
 
         // reset watchdog timer
-        mcp23008_signal_pin(MCP23008D_WDT_PIN, MCP23008B_WDT_PIN, SIGNAL_PIN_DELAY);
+        io_expander_signal_pin(SIGNAL_PIN_WDT);
         esp_task_wdt_reset();
 
         //Delay for deviceToCloudInterval seconds
@@ -323,6 +343,19 @@ void app_main()
     // initialize DS3231 realtime clock
     ds3231_status = ds3231_init();    
 
+    int cnt = 0;
+    while (!internetConnected)
+    {   
+        vTaskDelay(ONE_SECOND_DELAY * 5);  
+        ESP_LOGI(TAG, "Waiting for IP adress %d", cnt++);   
+        if (cnt > MAX_IP_RETRYS)
+        {
+            ESP_LOGE(TAG, "No IP adress received in time, rebooting chip in 5 sec..."); 
+            vTaskDelay(ONE_SECOND_DELAY * 5);               
+            esp_restart();
+        }
+    }
+
     azure_client = init_iothub_client(iotDeviceId);
     if (azure_client == NULL)
     {
@@ -384,5 +417,6 @@ void app_main()
     {   
         ESP_LOGE(TAG, "Create gesture sensor task failed"); 
     }
+
 }
 

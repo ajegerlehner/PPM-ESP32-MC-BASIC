@@ -27,6 +27,7 @@ typedef struct IOT_DEVICE_CONFIG
     float runtimeRate;
     uint16_t runtimeTimeFence;
     uint16_t watchdogTimeFence;
+    uint16_t downtimeTimeFence;
 } DeviceConfig;
 
 

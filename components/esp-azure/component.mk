@@ -1,18 +1,14 @@
 #
 # Component Makefile
 #
- 
+
 # Component configuration in preprocessor defines
 CFLAGS += -DUSE_LWIP_SOCKET_FOR_AZURE_IOT
 
 COMPONENT_ADD_INCLUDEDIRS := \
-port \
-port/inc \
 azure-iot-sdk-c/c-utility/inc \
-azure-iot-sdk-c/c-utility/inc/azure_c_shared_utility \
-azure-iot-sdk-c/c-utility/pal/inc \
-azure-iot-sdk-c/c-utility/pal/freertos \
-azure-iot-sdk-c/c-utility/pal/generic \
+azure-iot-sdk-c/c-utility/deps/azure-macro-utils-c/inc \
+azure-iot-sdk-c/c-utility/deps/umock-c/inc \
 azure-iot-sdk-c/iothub_client/inc \
 azure-iot-sdk-c/serializer/inc \
 azure-iot-sdk-c/umqtt/inc \
@@ -21,14 +17,19 @@ azure-iot-sdk-c/deps/parson \
 azure-iot-sdk-c/provisioning_client/inc \
 azure-iot-sdk-c/provisioning_client/adapters \
 azure-iot-sdk-c/provisioning_client/deps/utpm/inc \
- 
+
+COMPONENT_PRIV_INCLUDEDIRS := \
+port/inc \
+azure-iot-sdk-c/c-utility/pal/inc \
+azure-iot-sdk-c/c-utility/pal/freertos \
+azure-iot-sdk-c/c-utility/pal/generic \
+
 ifndef CONFIG_TARGET_PLATFORM_ESP8266
 COMPONENT_ADD_INCLUDEDIRS += azure-iot-sdk-c/certs
 endif
- 
+
 COMPONENT_OBJS = \
 azure-iot-sdk-c/c-utility/pal/freertos/lock.o \
-azure-iot-sdk-c/c-utility/pal/dns_async.o \
 azure-iot-sdk-c/c-utility/pal/socket_async.o \
 azure-iot-sdk-c/c-utility/pal/freertos/threadapi.o \
 azure-iot-sdk-c/c-utility/pal/freertos/tickcounter.o \
@@ -37,6 +38,7 @@ azure-iot-sdk-c/c-utility/pal/tlsio_options.o \
 port/src/agenttime_esp.o \
 port/src/platform_esp.o \
 port/src/tlsio_esp_tls.o \
+port/src/wsio_esp.o \
 \
 azure-iot-sdk-c/c-utility/src/xlogging.o \
 azure-iot-sdk-c/c-utility/src/singlylinkedlist.o \
@@ -47,6 +49,7 @@ azure-iot-sdk-c/c-utility/src/constmap.o \
 azure-iot-sdk-c/c-utility/src/crt_abstractions.o \
 azure-iot-sdk-c/c-utility/src/doublylinkedlist.o \
 azure-iot-sdk-c/c-utility/src/gballoc.o \
+azure-iot-sdk-c/c-utility/src/gb_rand.o \
 azure-iot-sdk-c/c-utility/src/gb_stdio.o \
 azure-iot-sdk-c/c-utility/src/gb_time.o \
 azure-iot-sdk-c/c-utility/src/hmac.o \
@@ -64,9 +67,13 @@ azure-iot-sdk-c/c-utility/src/strings.o \
 azure-iot-sdk-c/c-utility/src/string_tokenizer.o \
 azure-iot-sdk-c/c-utility/src/urlencode.o \
 azure-iot-sdk-c/c-utility/src/usha.o \
+azure-iot-sdk-c/c-utility/src/utf8_checker.o \
+azure-iot-sdk-c/c-utility/src/uws_client.o \
+azure-iot-sdk-c/c-utility/src/uws_frame_encoder.o \
 azure-iot-sdk-c/c-utility/src/vector.o \
+azure-iot-sdk-c/c-utility/src/wsio.o \
 azure-iot-sdk-c/c-utility/src/xio.o \
-azure-iot-sdk-c/c-utility/src/base64.o \
+azure-iot-sdk-c/c-utility/src/azure_base64.o \
 \
 \
 azure-iot-sdk-c/iothub_client/src/iothub_device_client_ll.o \
@@ -79,6 +86,7 @@ azure-iot-sdk-c/iothub_client/src/iothub_client_diagnostic.o \
 azure-iot-sdk-c/iothub_client/src/iothub_message.o \
 azure-iot-sdk-c/iothub_client/src/iothubtransport.o \
 azure-iot-sdk-c/iothub_client/src/iothubtransportmqtt.o \
+azure-iot-sdk-c/iothub_client/src/iothubtransportmqtt_websockets.o \
 azure-iot-sdk-c/iothub_client/src/iothubtransport_mqtt_common.o \
 azure-iot-sdk-c/iothub_client/src/iothub_transport_ll_private.o \
 azure-iot-sdk-c/iothub_client/src/version.o \
@@ -123,7 +131,7 @@ azure-iot-sdk-c/provisioning_client/deps/utpm/src/Memory.o \
 azure-iot-sdk-c/provisioning_client/deps/utpm/src/tpm_socket_comm.o \
 azure-iot-sdk-c/iothub_client/src/iothub.o \
 azure-iot-sdk-c/c-utility/src/http_proxy_io.o \
-azure-iot-sdk-c/c-utility/src/base32.o \
+azure-iot-sdk-c/c-utility/src/azure_base32.o \
 
 ifdef CONFIG_DEVICE_COMMON_NAME
 COMPONENT_OBJS += azure-iot-sdk-c/provisioning_client/src/iothub_auth_client.o
@@ -164,3 +172,5 @@ CFLAGS += -Wno-unused-function -Wno-missing-braces -Wno-missing-field-initialize
 ifdef CONFIG_DEVICE_COMMON_NAME
 CFLAGS += -DUSE_PROV_MODULE
 endif
+
+azure-iot-sdk-c/iothub_client/src/iothubtransport_mqtt_common.o: CFLAGS+=-Wno-maybe-uninitialized

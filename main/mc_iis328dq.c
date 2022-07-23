@@ -8,6 +8,7 @@
 
 #include <stdio.h>
 #include "driver/i2c.h"
+#include "mc_common.h"
 #include "mc_iis328dq.h"
 #include "mc_data.h"
 
@@ -33,6 +34,8 @@ const uint8_t IIS328DQ_OUT_Z_L = 0x2C;                      // output Z lsb
 const uint8_t IIS328DQ_OUT_Z_H = 0x2D;                      // output Z msb
 const double IIS328DQ_G_FORCE = 9.80665;                 	// constant g force
 
+extern DeviceHWStatus deviceHWStatus;
+
 i2c_dev_t	iis328dq_dev;
 
 esp_err_t iis328dq_init()
@@ -57,6 +60,7 @@ esp_err_t iis328dq_init()
     if (statusReg != IIS328DQ_WHOAMI_ID)
     {
         ESP_LOGE(TAG, "Who am I returned wrong device id: %x", statusReg);
+		deviceHWStatus.iis328dq_present = 0;
         return ESP_FAIL;
     }
 
@@ -78,6 +82,7 @@ esp_err_t iis328dq_init()
 	}
 
     ESP_LOGI(TAG, "Device initialized.");
+	deviceHWStatus.iis328dq_present = 1;
 
 	return ESP_OK;
 }
@@ -87,6 +92,9 @@ void iis328dq_read_data(SamplingMessage *msg)
 	int ret;
     uint8_t resultLReg;
     uint8_t resultHReg;	
+
+	if (!deviceHWStatus.iis328dq_present)
+		return;
 
 	ESP_LOGI(TAG, "Reading acceleration data...");
 

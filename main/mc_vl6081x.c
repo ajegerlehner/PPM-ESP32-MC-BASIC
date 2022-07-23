@@ -8,6 +8,7 @@
 
 #include <stdio.h>
 #include "driver/i2c.h"
+#include "mc_common.h"
 #include "mc_vl6180x.h"
 
 #define TAG "VL6180X"
@@ -28,6 +29,8 @@
  const int16_t RESULT__RANGE_RETURN_RATE                = 0x0066;   // 9.7 format
  const int16_t GESTURE_THRESHOLD_MIN                    = 20;       // calibarated gesture detection threshold
  const int16_t GESTURE_THRESHOLD_MAX                    = 50;       // calibarated gesture detection threshold
+
+extern DeviceHWStatus deviceHWStatus;
 
 i2c_dev_t	vl6180x_dev;
 
@@ -52,12 +55,14 @@ void vl6180x_init()
     if (statusReg != VL6180X_DEVICE_ID)
     {
         ESP_LOGE(TAG, "Returned device identification is: %x, expected identification is: %x", statusReg, VL6180X_DEVICE_ID);
+        deviceHWStatus.vl6180x_present = 0;
         return;
     }
 
     ESP_LOGI(TAG, "Device correctly identified, id: %x hex", statusReg);
 
     ESP_LOGI(TAG, "Device initialization completed.");
+    deviceHWStatus.vl6180x_present = 1;
 
     vl61980x_setup();
 }
@@ -116,6 +121,9 @@ uint8_t vl6180x_gesture()
 {
     uint8_t response;
     uint8_t raw_range;
+
+    if (!deviceHWStatus.vl6180x_present)
+        return 0;
 
     while ((read_data_byte(RESULT__RANGE_STATUS) & 0x01) == 0);
     

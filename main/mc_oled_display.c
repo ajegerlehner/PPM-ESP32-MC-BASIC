@@ -18,6 +18,13 @@ static const char *timeTypeStr[] = {
 
 static ssd1306_handle_t ssd1306_dev = NULL;
 
+extern uint8_t wifiConnected;
+extern uint8_t setupTimeForced;
+
+const uint8_t c_chEth816[16] = //ethernet signal
+        { 0xFF, 0xFF, 0x92, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+                0xFF, 0xFF, 0xFF, 0xFF, 0xFF };
+
 #define TAG "OLED"
 
 /**SSD1306 - OLED Display**/
@@ -36,7 +43,7 @@ esp_err_t ssd1306_show_signs(ssd1306_handle_t dev)
     //iot_ssd1306_draw_bitmap(dev, 40, 2, &c_chMsg816[0], 16, 8);
     //iot_ssd1306_draw_bitmap(dev, 64, 2, &c_chGPRS88[0], 8, 8);
     iot_ssd1306_draw_bitmap(dev, 111, 2, &c_chSingal816[0], 16, 8);
-    //iot_ssd1306_draw_bitmap(dev, 112, 2, &c_chBat816[0], 16, 8);
+    iot_ssd1306_draw_bitmap(dev, 64, 2, &c_chEth816[0], 16, 8);
 
     return iot_ssd1306_refresh_gram(dev);
 }
@@ -52,7 +59,7 @@ void ssd1306_init()
     ssd1306_dev = iot_ssd1306_create(i2c_bus, SSD1306_I2C_ADDRESS);
     iot_ssd1306_refresh_gram(ssd1306_dev);
     iot_ssd1306_clear_screen(ssd1306_dev, 0x00);
-    ssd1306_show_signs(ssd1306_dev);
+    //ssd1306_show_signs(ssd1306_dev);
 
     ESP_LOGI(TAG, "SSD1306 initialization completed");
 }
@@ -90,11 +97,28 @@ void oled_write_data(SamplingMessage* msg, DeviceStatus* stat, int screenNo)
             sprintf(oled_line, "%s", msg->iotDeviceId);
             iot_ssd1306_draw_string(ssd1306_dev, 0, 0, (const uint8_t *) oled_line, 16, 1);
         }
+        // write connection type symbol
+        if (wifiConnected)
+        {
+            iot_ssd1306_draw_bitmap(ssd1306_dev, 111, 2, &c_chSingal816[0], 16, 8);
+        }
+        else
+        {
+            // to do: iot_ssd1306_draw_bitmap(ssd1306_dev, 111, 2, &c_chEth816[0], 16, 8);
+            iot_ssd1306_draw_bitmap(ssd1306_dev, 111, 2, &c_chMsg816[0], 16, 8);            
+        }
         sprintf(oled_line, "MsgNo:%9ld", msg->msgNum);
         iot_ssd1306_draw_string(ssd1306_dev, 0, 16, (const uint8_t *) oled_line, 16, 1);
         sprintf(oled_line, "Speed:%9.0f", msg->speed);
         iot_ssd1306_draw_string(ssd1306_dev, 0, 32, (const uint8_t *) oled_line, 16, 1);
-        sprintf(oled_line, "TimeT:%9s", timeTypeStr[msg->timeType]);
+        if (setupTimeForced)
+        {
+            sprintf(oled_line, "Time*:%9s", timeTypeStr[msg->timeType]);
+        }
+        else
+        {
+            sprintf(oled_line, "TimeT:%9s", timeTypeStr[msg->timeType]);
+        }
         iot_ssd1306_draw_string(ssd1306_dev, 0, 48, (const uint8_t *) oled_line, 16, 1);
         break;
     case 1:
@@ -149,9 +173,6 @@ void oled_write_data(SamplingMessage* msg, DeviceStatus* stat, int screenNo)
         OTAtime = localtime(&stat->lastOTAUpdate);
 
         strftime(strBuffer, 12, "%d.%m.%Y", OTAtime);
-
-        ESP_LOGI(TAG, "OTA time: %s", strBuffer);
-
         sprintf(oled_line, "AV:%s", stat->appVersion);
         iot_ssd1306_draw_string(ssd1306_dev, 0, 16, (const uint8_t *) oled_line, 16, 1);
 
@@ -174,10 +195,20 @@ void oled_write_data(SamplingMessage* msg, DeviceStatus* stat, int screenNo)
         sprintf(timeBuf, "UpTim:%2dd%2dh%2dm", upTimeDays, upTimeHrs, upTimeMin);
         memset(oled_line, 0, 20);
         strncpy(oled_line, timeBuf, 20);
-
-        ESP_LOGI(TAG, "UpTime: %2dd%2dh%2dm", upTimeDays, upTimeHrs, upTimeMin);
-
         iot_ssd1306_draw_string(ssd1306_dev, 0, 48, (const uint8_t *) oled_line, 16, 1);    
+        break;
+    case 9:
+        sprintf(oled_line, "Device IP addr:");
+        iot_ssd1306_draw_string(ssd1306_dev, 0, 16, (const uint8_t *) oled_line, 16, 1);
+        sprintf(oled_line, "%15s", stat->deviceIPAddress);
+        iot_ssd1306_draw_string(ssd1306_dev, 0, 32, (const uint8_t *) oled_line, 16, 1);
+        #ifdef CONFIG_PPM_IOT_MQTT_WEBSOCKETS
+        sprintf(oled_line, "MQTT_WEBSOCKETS");
+        #endif
+        #ifdef CONFIG_PPM_IOT_MQTT
+        sprintf(oled_line, "MQTT");
+        #endif
+        iot_ssd1306_draw_string(ssd1306_dev, 0, 48, (const uint8_t *) oled_line, 16, 1);
         break;
     default:
         break;

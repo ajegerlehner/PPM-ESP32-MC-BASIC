@@ -1,4 +1,5 @@
 #include "cJSON.h"
+#include "math.h"
 #include "mc_data.h"
 #include "esp_log.h"
 
@@ -18,7 +19,7 @@ int serializeSamplingMessage(SamplingMessage *msg, char *jsonString)
     json_object_set_number(root_object, "timeStamp", msg->timeStamp);
     json_object_set_number(root_object, "timeType", msg->timeType);
     json_object_set_number(root_object, "elapseTime", msg->elapseTime);
-    json_object_set_number(root_object, "speed", msg->speed);
+    json_object_set_number(root_object, "speed", decRound3(msg->speed));
     json_object_set_number(root_object, "tickCount1", msg->tickCount1);
     json_object_set_number(root_object, "tickCount2", msg->tickCount2);
     json_object_set_number(root_object, "tickCount3", msg->tickCount3);
@@ -69,6 +70,7 @@ int serializeStatusgMessage(DeviceStatus *status, char *jsonString)
     json_object_set_string(root_object, "msgType", status->msgType);
     json_object_set_string(root_object, "statusMsg", status->statusMsg);
     json_object_set_string(root_object, "serialNo", status->serialNo);
+    json_object_set_string(root_object, "deviceIPAddress", status->deviceIPAddress);
     json_object_set_number(root_object, "timeStamp", status->timeStamp);
     json_object_set_number(root_object, "lastBootTime", status->lastBootTime);
     json_object_set_number(root_object, "upTime", status->upTime);
@@ -80,6 +82,7 @@ int serializeStatusgMessage(DeviceStatus *status, char *jsonString)
     json_object_set_number(root_object, "heapSize", status->heapSize);
     json_object_set_string(root_object, "appVersion", status->appVersion);
     json_object_set_number(root_object, "lastOTAUpdate", status->lastOTAUpdate);
+    json_object_set_number(root_object, "peripherialStatus", status->peripherialStatus);
 
     serialized_string = json_serialize_to_string(root_value);
     strcpy(jsonString, serialized_string);
@@ -89,4 +92,18 @@ int serializeStatusgMessage(DeviceStatus *status, char *jsonString)
     json_value_free(root_value);
 
     return strlen(jsonString);
+}
+
+float decRound3(float val)
+{
+    // rounds to 3 decimal places
+    float ret = 0.0;
+    long x;
+    
+    x = round(val * 100);
+
+    ret = x / 100.0;
+    ESP_LOGI(TAG, "Input value %f, X value: %ld, return value: %f", val, x, ret);
+
+    return ret;
 }

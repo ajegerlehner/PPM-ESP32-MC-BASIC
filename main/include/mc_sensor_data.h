@@ -24,5 +24,8 @@ TimeType calc_timeType(float speed, DeviceConfig devCfg);
 void signal_bat_low_status(bool _batLow);
 uint8_t read_tof_gesture();
 void read_si7021_data(SamplingMessage *msg);
+uint8_t deviceHWStatusToNum(void);
+void setSetupTimeForced(uint8_t _val);
+
 #endif
 
