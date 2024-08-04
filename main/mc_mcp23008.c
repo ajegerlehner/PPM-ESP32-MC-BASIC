@@ -9,6 +9,7 @@
 #include <stdio.h>
 #include "driver/i2c.h"
 #include "mc_common.h"
+#include "mc_io_expander_hal.h"
 #include "mc_mcp23008.h"
 
 #define TAG "MCP23008"
@@ -129,11 +130,12 @@ int mcp23008b_init()
 
 void mcp23008d_set_pin(int _pin, int _pinValue)
 {
+	if (!deviceHWStatus.mcp23008d_present)
+		return;
+
 	i2c_cmd_handle_t cmd = i2c_cmd_link_create();
 	int ret;
 
-	if (!deviceHWStatus.mcp23008d_present)
-		return;
 
 	if (_pinValue == 0)
 	{
@@ -160,11 +162,12 @@ void mcp23008d_set_pin(int _pin, int _pinValue)
 
 void mcp23008b_set_pin(int _pin, int _pinValue)
 {
+	if (!deviceHWStatus.mcp23008b_present)		
+		return;
+
 	i2c_cmd_handle_t cmd = i2c_cmd_link_create();
 	int ret;
 
-	if (!deviceHWStatus.mcp23008b_present)
-		return;
 
 	if (_pinValue == 0)
 	{
@@ -238,14 +241,4 @@ void mcp23008_signal_boot_end()
 	mcp23008b_signal_pin(MCP23008B_AZURE_PIN, 250);
 	mcp23008b_signal_pin(MCP23008B_WDT_PIN, 250);
 	mcp23008b_signal_pin(MCP23008B_PLCOUT_PIN, 250);
-}
-
-int8_t clear_port_bit(int8_t _register, int _bitNumber)
-{
-	return (int8_t)(_register & ~(1 << _bitNumber));
-}
-
-int8_t set_port_bit(int8_t _register, int _bitNumber)
-{
-	return (int8_t)(_register | (1 << _bitNumber));
 }

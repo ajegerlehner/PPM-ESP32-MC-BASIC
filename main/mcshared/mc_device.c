@@ -50,6 +50,7 @@ void deserializeDeviceConfig(char *jsonStr)
     deviceConfig.setuptimeTimeFence = assign_json_tag_uint16(payload, "setuptimeTimefence");
     deviceConfig.runtimeTimeFence = assign_json_tag_uint16(payload, "runtimeTimeFence");
     deviceConfig.watchdogTimeFence = assign_json_tag_uint16(payload, "watchDogTimer");
+    deviceConfig.lastTimeType = assign_json_tag_uint16(payload, "lastTimeType");
     
 
     // clean up memory
@@ -62,6 +63,7 @@ char * assign_json_tag_str(cJSON *pl, const char * tag_name)
     cJSON *jsonTag = cJSON_GetObjectItem(pl, tag_name);
 
     ret = (char *) malloc(strlen(jsonTag->valuestring)+1);
+    ESP_LOGW(TAG,"malloc assign_json_tag_str"); //todo
     memcpy(ret, jsonTag->valuestring, strlen(jsonTag->valuestring));
     //memcpy(&ret[strlen(jsonTag->valuestring)+1], "\0",1);
     memcpy(&ret[strlen(jsonTag->valuestring)], "\0",1);

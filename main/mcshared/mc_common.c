@@ -65,6 +65,7 @@ static esp_err_t esp32_event_handler(void *ctx, system_event_t *event)
            if (!deviceIPAddress)
             {
                 deviceIPAddress = malloc(sizeof(char)* MAX_IPADDRESS_LEN);
+                ESP_LOGW(TAG,"malloc deviceIPaddress"); //todo
                 sprintf(deviceIPAddress, "%15s", ip4addr_ntoa(&event->event_info.got_ip.ip_info.ip));
                 internetConnected = 1;
                 wifiConnected = 1;
@@ -278,6 +279,7 @@ esp_err_t nvs_read_str_value(const char *keyName, char **retString)
 
     // strLength including null terminator
     *retString = malloc(strLength);
+    ESP_LOGW(TAG,"malloc nvs string"); //todo
     ret = nvs_get_str(nvsHandle, (const char *)keyName, *retString, &strLength);
     if (ret != ESP_OK)
     {

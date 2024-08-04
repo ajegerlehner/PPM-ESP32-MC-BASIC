@@ -31,10 +31,12 @@ esp_err_t clientEventHandler(esp_http_client_event_t *evt)
             if (configBuffer == NULL)
             {
                configBuffer = (char *) malloc(evt->data_len); 
+               ESP_LOGW(TAG,"malloc configBuffer clientEventHandler"); //todo
             }
             else
             {
                 configBuffer = (char *) realloc(configBuffer, evt->data_len + bufferIdx);
+                ESP_LOGW(TAG,"realloc configBuffer clientEventHandler"); //todo
             }
             memcpy(&configBuffer[bufferIdx], evt->data, evt->data_len);
             bufferIdx += evt->data_len;            

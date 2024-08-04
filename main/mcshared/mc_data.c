@@ -38,16 +38,16 @@ int serializeSamplingMessage(SamplingMessage *msg, char *jsonString)
     json_object_set_number(root_object, "logicLevel4", msg->logicLevel4);
     json_object_set_number(root_object, "logicLevel5", msg->logicLevel5);
     json_object_set_number(root_object, "temperature", msg->temperature);
-    json_object_set_number(root_object, "rtdTemperature", msg->rtd_temperature);
-    json_object_set_number(root_object, "humidity", msg->humidity);
-    json_object_set_number(root_object, "pressure", msg->pressure);
-    json_object_set_number(root_object, "altitude", msg->altitude);
-    json_object_set_number(root_object, "maxAmplitudeX", msg->maxAmplitudeX);
-    json_object_set_number(root_object, "frequencyMaxX", msg->frequencyMaxX);
-    json_object_set_number(root_object, "maxAmplitudeY", msg->maxAmplitudeY);
-    json_object_set_number(root_object, "frequencyMaxY", msg->frequencyMaxY);
-    json_object_set_number(root_object, "maxAmplitudeZ", msg->maxAmplitudeZ);
-    json_object_set_number(root_object, "frequencyMaxZ", msg->frequencyMaxZ);
+    json_object_set_number(root_object, "rtdTemperature", decRound3(msg->rtd_temperature));
+    json_object_set_number(root_object, "humidity", decRound3(msg->humidity));
+    json_object_set_number(root_object, "pressure", decRound3(msg->pressure));
+    json_object_set_number(root_object, "altitude", decRound3(msg->altitude));
+    json_object_set_number(root_object, "maxAmplitudeX", decRound3(msg->maxAmplitudeX));
+    json_object_set_number(root_object, "frequencyMaxX", decRound3(msg->frequencyMaxX));
+    json_object_set_number(root_object, "maxAmplitudeY", decRound3(msg->maxAmplitudeY));
+    json_object_set_number(root_object, "frequencyMaxY", decRound3(msg->frequencyMaxY));
+    json_object_set_number(root_object, "maxAmplitudeZ", decRound3(msg->maxAmplitudeZ));
+    json_object_set_number(root_object, "frequencyMaxZ", decRound3(msg->frequencyMaxZ));
     json_object_set_number(root_object, "freeHeapSize", msg->freeHeapSize);
 
     serialized_string = json_serialize_to_string(root_value);
@@ -76,7 +76,8 @@ int serializeStatusgMessage(DeviceStatus *status, char *jsonString)
     json_object_set_number(root_object, "upTime", status->upTime);
     json_object_set_number(root_object, "azureMsgSent", status->azureMsgSent);
     json_object_set_number(root_object, "azureMsgReceived", status->azureMsgReceived);    
-    json_object_set_number(root_object, "processorTemperature", status->processorTemperature);
+    json_object_set_string(root_object, "lastCloudToDeviceMsg", status->lastCloudToDeviceMsg);
+    json_object_set_number(root_object, "processorTemperature", decRound3(status->processorTemperature));
     json_object_set_number(root_object, "rtcBatteryLow", status->rtcBatteryLow);
     json_object_set_number(root_object, "hwRevision", status->hwRevision);
     json_object_set_number(root_object, "heapSize", status->heapSize);
@@ -97,13 +98,14 @@ int serializeStatusgMessage(DeviceStatus *status, char *jsonString)
 float decRound3(float val)
 {
     // rounds to 3 decimal places
-    float ret = 0.0;
-    long x;
+    float ret = 0.0;    
     
-    x = round(val * 100);
+    if (val == 0)
+        return val;
 
-    ret = x / 100.0;
-    ESP_LOGI(TAG, "Input value %f, X value: %ld, return value: %f", val, x, ret);
+    ret = ceil(val * 1000) / 1000;
+
+    ESP_LOGI(TAG, "Input value %f, return value: %f", val, ret);
 
     return ret;
 }

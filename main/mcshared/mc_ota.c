@@ -38,16 +38,22 @@ esp_err_t client_event_handler(esp_http_client_event_t *evt)
 
 void performOTAUpdate(DeviceTwin* devTwin)
 {
+    char errorMsg[200];
+    int ret;
     time_t otaTime;    
     esp_http_client_config_t clientConfig = {
         .url = devTwin->softwareFilePath,
         .event_handler = client_event_handler,
-        .cert_pem = (char *)server_cert_pem_start
+        .cert_pem = NULL // (char *)server_cert_pem_start
     };
 
     ESP_LOGI(TAG, "Stating OTA update from version %s to version %s using image file %s", devTwin->currentSoftwareVersion, devTwin->desiredSoftwareVersion, devTwin->softwareFilePath);
 
-    if (esp_https_ota(&clientConfig) == ESP_OK)
+    // reset watch dog timer so it does not reboot the chip through watch dog timeout
+    esp_task_wdt_reset();
+    
+    ret = esp_https_ota(&clientConfig); 
+    if ( ret == ESP_OK)
     {
         // ota update succeeded
         ESP_LOGI(TAG, "OTA update successfull to version %s - restarting in %d seconds.", devTwin->desiredSoftwareVersion, 2 * deviceConfig.deviceToCloudInterval);
@@ -69,6 +75,6 @@ void performOTAUpdate(DeviceTwin* devTwin)
 
     // ota update was not successfull
     ESP_LOGE(TAG, "Failed to perform OTA update to version %s, image file %s", devTwin->desiredSoftwareVersion, devTwin->softwareFilePath);
-    create_status_msg(&deviceStatus, &samplingMsg, "OTA Update failed");
+    sprintf(errorMsg, "OTA Update failed to version %s, error code: %d", devTwin->desiredSoftwareVersion, ret);
+    enqueueStatusMsg(&deviceStatus, &samplingMsg, errorMsg);
 }
-

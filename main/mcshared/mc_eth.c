@@ -106,6 +106,7 @@ static void got_ip_event_handler(void *arg, esp_event_base_t event_base,
     if (!deviceIPAddress)
     {
         deviceIPAddress = malloc(sizeof(char)* MAX_IPADDRESS_LEN);
+        ESP_LOGW(TAG,"malloc deviceIPaddress got_IP_adress_handler"); //todo
         sprintf(deviceIPAddress, IPSTR, IP2STR(&ip_info->ip));
         internetConnected = 1;     
         wifiConnected = 0; 
@@ -149,6 +150,7 @@ char* getDeviceIPAddress()
     if (!deviceIPAddress)
     {
         deviceIPAddress = malloc(sizeof(char)* MAX_IPADDRESS_LEN);
+        ESP_LOGW(TAG,"malloc getDeviceIPaddress()"); //todo
         sprintf(deviceIPAddress, "%15s", "UNKNOWN");
     }
 

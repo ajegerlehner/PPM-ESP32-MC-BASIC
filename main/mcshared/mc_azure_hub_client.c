@@ -12,6 +12,7 @@
 #include "mc_device.h"
 #include "mc_ota.h"
 #include "mc_sensor_data.h"
+#include "mc_data.h"
 
 #ifdef CONFIG_PPM_IOT_MQTT
     #include "iothubtransportmqtt.h"
@@ -21,6 +22,10 @@
 #endif // MQTT_OVER_WEBSOCKETS
 
 #define TAG "AUZURE_IOT"
+
+extern SamplingMessage samplingMsg;
+extern DeviceStatus deviceStatus;
+void enqueueStatusMsg(DeviceStatus *statusMsg, SamplingMessage *samplingMsg, char *statusTxt);
 
 DeviceTwin currentDeviceTwin;
 
@@ -148,6 +153,8 @@ char* deviceTwinToJSON(DeviceTwin* twin)
 
     jsonStr = json_serialize_to_string(root_value);
 
+    json_value_free(root_value);
+    
     return jsonStr;
 }
 
@@ -293,6 +300,8 @@ void setupDeviceTwin(IOTHUB_DEVICE_CLIENT_LL_HANDLE iothub_deviceclient)
         IoTHubDeviceClient_LL_SendReportedState(iothub_deviceclient, (const unsigned char*)reportedProperties, strlen(reportedProperties), reportedStateCallback, NULL);
         IoTHubDeviceClient_LL_SetDeviceTwinCallback(iothub_deviceclient, deviceTwinCallback, &currentDeviceTwin);
     }
+
+    free(reportedProperties);
 }
 
 void setupDeviceCallbackMethods(IOTHUB_DEVICE_CLIENT_LL_HANDLE iothub_deviceclient)
@@ -321,8 +330,13 @@ int deviceMethodCallback(const char* method_name, const unsigned char* payload, 
     int result;
     RebootStruct reboot;
 
+    // log cloud to device messge in device status
+    deviceStatus.azureMsgReceived++;
+    strcpy(deviceStatus.lastCloudToDeviceMsg, method_name);
+
     if (strcmp("REBOOT", strupr((char*)method_name)) == 0)
     {
+        enqueueStatusMsg(&deviceStatus, &samplingMsg, "Cloud to device: REBOOT.");
         const char deviceMethodResponse[] = "{ \"Response\": \"Rebooting chip.\" }";
         *response_size = sizeof(deviceMethodResponse)-1;
         *response = malloc(*response_size);
@@ -330,7 +344,7 @@ int deviceMethodCallback(const char* method_name, const unsigned char* payload, 
         result = 200;
         
         // spawn reboot task
-        reboot.rebootDelay = 10;
+        reboot.rebootDelay = CONFIG_PPM_IOT_REBOOT_DELAY;
         spawn_reboot_task(&reboot);
     }
     else if (strcmp("NVSCLEAR", strupr((char*)method_name)) == 0)
@@ -344,6 +358,8 @@ int deviceMethodCallback(const char* method_name, const unsigned char* payload, 
             *response = malloc(*response_size);
             (void)memcpy(*response, deviceMethodResponse, *response_size);
             result = 200;
+
+            enqueueStatusMsg(&deviceStatus, &samplingMsg, "Cloud to device: NVSCLEAR.");
             
             // spawn reboot task
             reboot.rebootDelay = 10;
@@ -360,43 +376,52 @@ int deviceMethodCallback(const char* method_name, const unsigned char* payload, 
     }    
     else if (strcmp("UPDATE", strupr((char*)method_name)) == 0)
     {
-        if (nvs_delete_key(NVS_SSID_TAG) == ESP_OK && 
-            nvs_delete_key(NVS_SSID_PWD_TAG) == ESP_OK &&
-            nvs_delete_key(NVS_NODENAME_TAG) == ESP_OK)
-        {
-            const char deviceMethodResponse[] = "{ \"Response\": \"Firmware updated.\" }";
-            *response_size = sizeof(deviceMethodResponse)-1;
-            *response = malloc(*response_size);
-            (void)memcpy(*response, deviceMethodResponse, *response_size);
-            result = 200;
+        enqueueStatusMsg(&deviceStatus, &samplingMsg, "Cloud to device: UPDATE.");
+        const char deviceMethodResponse[] = "{ \"Response\": \"Update message triggered.\" }";
+        *response_size = sizeof(deviceMethodResponse)-1;
+        *response = malloc(*response_size);
+        (void)memcpy(*response, deviceMethodResponse, *response_size);
+        result = 200;
             
-            // spawn reboot task
-            reboot.rebootDelay = 10;
-            spawn_reboot_task(&reboot);
-        }
-        else
-        {
-            const char deviceMethodResponse[] = "{ \"Response\": \"Error updating firmware.\" }";
-            *response_size = sizeof(deviceMethodResponse)-1;
-            *response = malloc(*response_size);
-            (void)memcpy(*response, deviceMethodResponse, *response_size);
-            result = -1;
-        }        
     }    
-    else if (strcmp("NEWOPER", strupr((char*)method_name)) == 0) // new operation on sfdc terminal
+    else if (strcmp("STATUS", strupr((char*)method_name)) == 0)
     {
-        setSetupTimeForced(1);
+        enqueueStatusMsg(&deviceStatus, &samplingMsg, "Cloud to device: STATUS.");
+        const char deviceMethodResponse[] = "{ \"Response\": \"Update status message triggered.\" }";
+        *response_size = sizeof(deviceMethodResponse)-1;
+        *response = malloc(*response_size);
+        (void)memcpy(*response, deviceMethodResponse, *response_size);
+        result = 200;
+            
+    }    
+    else if (strcmp("SETUP", strupr((char*)method_name)) == 0) // new operation on sfdc terminal
+    {
+        setCurrentTimeType(Setuptime);
+        enqueueStatusMsg(&deviceStatus, &samplingMsg, "Cloud to device: SETUP.");
         ESP_LOGI(TAG, "Setuptime forced set by cloud to device message. Payload: %s", payload); // todo correct string handling
 
-        const char deviceMethodResponse[] = "{ \"Response\": \"New operation id triggered.\" }";
+        const char deviceMethodResponse[] = "{ \"Response\": \"New setup operation triggered.\" }";
         *response_size = sizeof(deviceMethodResponse)-1;
         *response = malloc(*response_size);
         (void)memcpy(*response, deviceMethodResponse, *response_size);
         result = 200;
     }    
-    else if (strcmp("NOORDER", strupr((char*)method_name)) == 0) // new operation on sfdc terminal
+    else if (strcmp("RUNTIME", strupr((char*)method_name)) == 0) // new operation on sfdc terminal
     {
-        setSetupTimeForced(0);
+        setCurrentTimeType(Runtime);
+        enqueueStatusMsg(&deviceStatus, &samplingMsg, "Cloud to device: RUNTIME.");
+        ESP_LOGI(TAG, "Runtime forced set by cloud to device message. Payload: %s", payload); // todo correct string handling
+
+        const char deviceMethodResponse[] = "{ \"Response\": \"New runtime operation id triggered.\" }";
+        *response_size = sizeof(deviceMethodResponse)-1;
+        *response = malloc(*response_size);
+        (void)memcpy(*response, deviceMethodResponse, *response_size);
+        result = 200;
+    }    
+    else if (strcmp("DOWNTIME", strupr((char*)method_name)) == 0) // new operation on sfdc terminal
+    {
+        setCurrentTimeType(Downtime);
+        enqueueStatusMsg(&deviceStatus, &samplingMsg, "Cloud to device: DOWNTIME.");
         ESP_LOGI(TAG, "Downtime forced set by cloud to device message. Payload: %s", payload); // todo correct string handling
 
         const char deviceMethodResponse[] = "{ \"Response\": \"New downtime operation id triggered.\" }";
@@ -405,11 +430,48 @@ int deviceMethodCallback(const char* method_name, const unsigned char* payload, 
         (void)memcpy(*response, deviceMethodResponse, *response_size);
         result = 200;
     }    
+    else if (strcmp("PAUSE", strupr((char*)method_name)) == 0) // new operation on sfdc terminal
+    {        
+        setCurrentTimeType(Pause);
+        enqueueStatusMsg(&deviceStatus, &samplingMsg, "Cloud to device: PAUSE.");
+        ESP_LOGI(TAG, "Pause forced set by cloud to device message. Payload: %s", payload); // todo correct string handling
+
+        const char deviceMethodResponse[] = "{ \"Response\": \"New pause operation id triggered.\" }";
+        *response_size = sizeof(deviceMethodResponse)-1;
+        *response = malloc(*response_size);
+        (void)memcpy(*response, deviceMethodResponse, *response_size);
+        result = 200;
+    }    
+    else if (strcmp("AUXTIME", strupr((char*)method_name)) == 0) // new operation on sfdc terminal
+    {        
+        setCurrentTimeType(Auxiliary);
+        enqueueStatusMsg(&deviceStatus, &samplingMsg, "Cloud to device: AUXTIME.");
+        ESP_LOGI(TAG, "Auxiliary time forced set by cloud to device message. Payload: %s", payload); // todo correct string handling
+
+        const char deviceMethodResponse[] = "{ \"Response\": \"New auxiliary time triggered.\" }";
+        *response_size = sizeof(deviceMethodResponse)-1;
+        *response = malloc(*response_size);
+        (void)memcpy(*response, deviceMethodResponse, *response_size);
+        result = 200;
+    }    
+    else if (strcmp("UNPRODTIME", strupr((char*)method_name)) == 0) // new operation on sfdc terminal
+    {        
+        setCurrentTimeType(Unproductive);
+        enqueueStatusMsg(&deviceStatus, &samplingMsg, "Cloud to device: UNPRODTIME.");
+        ESP_LOGI(TAG, "Unproductive time forced set by cloud to device message. Payload: %s", payload); // todo correct string handling
+
+        const char deviceMethodResponse[] = "{ \"Response\": \"New unproductive time triggered.\" }";
+        *response_size = sizeof(deviceMethodResponse)-1;
+        *response = malloc(*response_size);
+        (void)memcpy(*response, deviceMethodResponse, *response_size);
+        result = 200;
+    }    
     else
     {
         ESP_LOGW(TAG, "Unknown cloud to device message received.");
+        enqueueStatusMsg(&deviceStatus, &samplingMsg, "Cloud to device: UNKNOWN.");
         // All other entries are ignored.
-        const char deviceMethodResponse[] = "{ }";
+        const char deviceMethodResponse[] = "{ \"Response\": \"Unknown method call.\" }";
         *response_size = sizeof(deviceMethodResponse)-1;
         *response = malloc(*response_size);
         (void)memcpy(*response, deviceMethodResponse, *response_size);

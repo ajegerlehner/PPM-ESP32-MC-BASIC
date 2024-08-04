@@ -37,6 +37,7 @@ typedef struct rebootStruct {
 // device peripherials status
 typedef struct deviceHWStruct {
     uint8_t mcp23008d_present;
+    uint8_t mcp23017d_present;
     uint8_t mcp23008b_present;
     uint8_t pca9554a_present;
     uint8_t bme280_present;

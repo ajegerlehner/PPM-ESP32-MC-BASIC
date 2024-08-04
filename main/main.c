@@ -1,8 +1,7 @@
 /**
  * Name:            main.c
  * Description:     Source for entry point to application for the  
- *                  PPM IoT machine counter board using ESP-32 and 
- *                  ST32F04 microcontrollers. 
+ *                  PPM IoT machine counter board using ESP-32 
  *                  Collects sensor data and sends it to Azure IoT event hub
  * Initial Date:    2020-06-03
  * Author:          Andreas Jegerlehner
@@ -33,18 +32,20 @@
 #include "mc_iotcentral.h"
 #include "mc_gpio.h"
 #include "mc_device.h"
-#include "mc_stm32f04.h"
-#include "mc_ds3231.h"
 #include "mc_io_expander_hal.h"
 
 #define TAG "MAIN"
 
-#define OLED_SCREENS 10
-#define MAX_IP_RETRYS 20
+#define OLED_SCREENS    10
+#define MAX_IP_RETRYS   20
+
+#define BUTTON_HOME     1
+#define BUTTON_FWD      2
+#define BUTTON_BCK      4
 
 char *iotDeviceId;          // global iot device id
-char *deviceIPAddress;      // global ip adress
-int  internetConnected = 0; // global flag for ip adress received
+char *deviceIPAddress;      // global ip address
+int  internetConnected = 0; // global flag for ip address received
 uint8_t wifiConnected = 0;  // global flag for connection type
 
 DeviceConfig deviceConfig;  
@@ -52,8 +53,8 @@ SamplingMessage samplingMsg;
 DeviceStatus deviceStatus;
 DeviceHWStatus deviceHWStatus;
 
-char jsonSamplingMsg[AZURE_MSG_SIZE_MAX];
-char jsonStatusMsg[AZURE_MSG_SIZE_MAX];
+static char jsonSamplingMsg[AZURE_MSG_SIZE_MAX];
+static char jsonStatusMsg[AZURE_MSG_SIZE_MAX];
 
 QueueHandle_t statusMsgQueue;
 QueueHandle_t telemetryQueue;
@@ -68,11 +69,9 @@ uint8_t currentOLEDScreen;
 void log_startup_device_status()
 {
     ESP_LOGI(TAG, "MCP23008 io expander display present: %d", deviceHWStatus.mcp23008d_present);
-    ESP_LOGI(TAG, "MCP23008 io expander board present: %d", deviceHWStatus.mcp23008b_present);
+    ESP_LOGI(TAG, "MCP23017 io expander display present: %d", deviceHWStatus.mcp23017d_present);
     ESP_LOGI(TAG, "PCA9554A io expander display present: %d", deviceHWStatus.pca9554a_present);
-    ESP_LOGI(TAG, "BME280 sensor present: %d", deviceHWStatus.bme280_present);
     ESP_LOGI(TAG, "SI7021 sensor present: %d", deviceHWStatus.si7021_present);
-    ESP_LOGI(TAG, "IIS328DQ sesnor present: %d", deviceHWStatus.iis328dq_present);
     ESP_LOGI(TAG, "VL6180X sensor present: %d", deviceHWStatus.vl6180x_present);
 }
 
@@ -119,11 +118,11 @@ void board_init()
     // initialize port expanders
     io_expander_init();
 
+    // led test
+    io_expander_led_test();
+
     // initialize sensor data structures
     init_sensor_hardware();
-
-    // initialize communication with STM32 microcontroller
-    stm32_uart_install();
 
     // signal end of boot process
     io_expander_signal_boot_end();
@@ -132,7 +131,7 @@ void board_init()
     statusMsgQueue = xQueueCreate(10, sizeof(DeviceStatus));
     //telemetryQueue = xQueueCreate(5000, 600);
 
-        log_startup_device_status();
+    log_startup_device_status();
 }
 
 void enqueueStatusMsg(DeviceStatus *statusMsg, SamplingMessage *samplingMsg, char *statusTxt)
@@ -173,6 +172,9 @@ void azure_status_task(void *pvParameter)
             }
 
         }
+
+        // reset status queue
+        xQueueReset(statusMsgQueue);
         
         vTaskDelay(ONE_SECOND_DELAY * deviceConfig.deviceToCloudInterval);   
     }
@@ -188,7 +190,7 @@ void enqueueHeartbeatStatusMsg(void *pvParameter)
 
     while (1)
     {
-            enqueueStatusMsg(&deviceStatus, &samplingMsg, "Heartbeat.");
+            enqueueStatusMsg(&deviceStatus, &samplingMsg, "Heartbeat."); 
 
             vTaskDelay(ONE_SECOND_DELAY * CONFIG_PPM_IOT_HEARTBEAT_INTERVALL);
     }
@@ -201,6 +203,7 @@ void azure_task(void *pvParameter)
 {
     int jsonLen;    
     time_t now;
+    uint32_t heap, prevHeap;
 
     while (xSemaphoreTake(startUpMutex, (TickType_t) 10) != 1);
 
@@ -227,13 +230,24 @@ void azure_task(void *pvParameter)
 
     xSemaphoreGive(startUpMutex);
 
+    heap = esp_get_free_heap_size();
+
+
     while (1)
     {
-        // get sensor data readings in sampling message        
+        prevHeap = heap;
+
+
+        //Process cloud to device messages
+        process_azure_msgs(azure_client);
+        vTaskDelay(ONE_SECOND_DELAY *2);
+
+        // get sensor data readings in sampling message               
         read_sensor_data(&samplingMsg, deviceConfig);
-        
+
         // Create message to send to Azure IoT
         jsonLen = serializeSamplingMessage(&samplingMsg, jsonSamplingMsg);
+        
         ESP_LOGI(TAG, "Azure Msg: %s", jsonSamplingMsg);
 
         //Send message to Azure IoT Hub
@@ -249,14 +263,14 @@ void azure_task(void *pvParameter)
             ESP_LOGE(TAG, "Message Not Queued for Azure");
         }
 
-        //Process Any Messages
-        process_azure_msgs(azure_client);
-        vTaskDelay(ONE_SECOND_DELAY *2);
-
         // reset watchdog timer
         io_expander_signal_pin(SIGNAL_PIN_WDT);
         esp_task_wdt_reset();
 
+        heap = esp_get_free_heap_size();
+
+        ESP_LOGW(TAG,"Current heap: %d, Delta heap after full cycle before send Azure message: %d", heap, heap - prevHeap); 
+        
         //Delay for deviceToCloudInterval seconds
         vTaskDelay(ONE_SECOND_DELAY * deviceConfig.deviceToCloudInterval);     
     }
@@ -324,24 +338,69 @@ void gesture_sensor_task(void *pvParameter)
     vTaskDelete(NULL);  
 }
 
+// task to detect pressed buttons on mcp23017
+void button_press_task(void *pvParameter)
+{
+    uint8_t button_pressed = 0;
+
+    // wait for statup procedure to complete
+    while (xSemaphoreTake(startUpMutex, (TickType_t) 10) != 1);
+
+    // free mutex 
+    xSemaphoreGive(startUpMutex);
+
+    while(1)
+    {
+        button_pressed = read_button_press();
+
+        if (button_pressed > 0)
+        {
+            switch (button_pressed)
+            {
+                case BUTTON_HOME:
+                    currentOLEDScreen = 0;     
+                    break;
+                case BUTTON_FWD:
+                    currentOLEDScreen++;
+                    if (currentOLEDScreen > OLED_SCREENS -1)
+                        currentOLEDScreen = 0;     
+                    break;
+                case BUTTON_BCK:
+                    if (currentOLEDScreen == 0)
+                        currentOLEDScreen = OLED_SCREENS;     
+                    currentOLEDScreen--;     
+                    break;        
+                default:
+                    break;
+            }
+
+            // update OLED display immediately
+            while (xSemaphoreTake(oledDisplayMutex, (TickType_t) 10) !=1);
+            oled_write_data(&samplingMsg, &deviceStatus, currentOLEDScreen);
+            xSemaphoreGive(oledDisplayMutex);
+        }
+
+        vTaskDelay(ONE_MILLISECOND_DELAY *200);
+    }
+    
+    vTaskDelete(NULL);  
+}
+
+
 // app_main: main entry point
 void app_main()
 {
     int taskResult;    
-    esp_err_t ds3231_status;
 
     // set initial screen for OLED display
     currentOLEDScreen = 0;
-    
+
     board_init();
     vTaskDelay(ONE_SECOND_DELAY);
     ESP_LOGI(TAG, "ESP32 board initialized. Device id is: %s", iotDeviceId);
 
     startUpMutex = xSemaphoreCreateMutex();
     oledDisplayMutex = xSemaphoreCreateMutex();
-
-    // initialize DS3231 realtime clock
-    ds3231_status = ds3231_init();    
 
     int cnt = 0;
     while (!internetConnected)
@@ -362,11 +421,7 @@ void app_main()
         ESP_LOGE(TAG, "APP INFO: No Azure IoT Hub Handle was obtained");                
     }
 
-    // ds3231 has been reset, initialize time from internet time
-    if (ds3231_status != ESP_OK)
-    {
-        ds3231_init_time();
-    }
+    // todo set network time
 
     // setup Azure Iot event hub device twin
     setupDeviceTwin(azure_client);
@@ -374,6 +429,8 @@ void app_main()
     // setup device callback methods
     setupDeviceCallbackMethods(azure_client);
 
+    // set initial time type from last telemetry message.
+    setStartupTimeType(&deviceConfig);
     
     ESP_LOGI(TAG, "Waiting for device config..."); 
     while (strlen(deviceConfig.iotDeviceId) == 0 )
@@ -411,12 +468,26 @@ void app_main()
         ESP_LOGE(TAG, "Create show sensor task failed"); 
     }
 
-    //Low Priority Task for capturing gesture data
-    taskResult = xTaskCreate(&gesture_sensor_task, "gesture_sensor_task", 1024 * 3, NULL, 2, NULL); 
-    if (taskResult != pdPASS)
-    {   
-        ESP_LOGE(TAG, "Create gesture sensor task failed"); 
+    // if gesture sensor is present on display shield, enable gesture detection task
+    if (deviceHWStatus.vl6180x_present)
+    {
+        //Low Priority Task for capturing gesture data
+        taskResult = xTaskCreate(&gesture_sensor_task, "gesture_sensor_task", 1024 * 3, NULL, 2, NULL); 
+        if (taskResult != pdPASS)
+        {   
+            ESP_LOGE(TAG, "Create gesture sensor task failed"); 
+        }
+    }
+
+    // if mcp23017 is present, display shiel has buttons to change display, enable button detection task
+    if (deviceHWStatus.mcp23017d_present)
+    {
+        //Low Priority Task for capturing button presses
+        taskResult = xTaskCreate(&button_press_task, "button_press_task", 1024 * 3, NULL, 2, NULL); 
+        if (taskResult != pdPASS)
+        {   
+            ESP_LOGE(TAG, "Create button press task failed"); 
+        }
     }
 
 }
-

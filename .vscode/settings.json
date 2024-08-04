@@ -20,11 +20,17 @@
     "mc_i2c_bus.h": "c",
     "mc_common.h": "c",
     "mc_device.h": "c",
-    "mc_mcp23008.h": "c"
+    "mc_mcp23008.h": "c",
+    "sdkconfig.h": "c",
+    "mc_data.h": "c"
   },
  "git.ignoreLimitWarning": true,
-  "idf.portWin": "COM8",
+  "idf.portWin": "COM6",
   "idf.flashType": "JTAG",
   "cmake.configureOnOpen": true,
-  "idf.adapterTargetName": "esp32"
+  "idf.adapterTargetName": "esp32",
+  "idf.openOcdConfigs": [
+    "interface/ftdi/esp32_devkitj_v1.cfg",
+    "target/esp32.cfg"
+  ]
 }

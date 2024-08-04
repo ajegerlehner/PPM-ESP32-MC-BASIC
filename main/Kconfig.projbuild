@@ -28,6 +28,12 @@ config PPM_IOT_HEARTBEAT_INTERVALL
 	help
 		Intervall seconds to send heartbeat status message to iot event hub
 
+config PPM_IOT_HARDWARE_VERSION
+	int "PPM IoT hardware version"
+	default 2402
+	help
+		PPM IoT PCB Version
+		
 config PPM_IOT_PROTOCOL
 	choice 
 		bool "IoT event hub communication protocol"

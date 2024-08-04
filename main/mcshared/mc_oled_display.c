@@ -9,13 +9,6 @@
 #include "mc_data.h"
 #include "mc_common.h"
 
-static const char *timeTypeStr[] = {
-    "Stopped",
-    "Setuptime",
-    "Runtime",
-    "Downtime"
-};
-
 static ssd1306_handle_t ssd1306_dev = NULL;
 
 extern uint8_t wifiConnected;
@@ -24,6 +17,18 @@ extern uint8_t setupTimeForced;
 const uint8_t c_chEth816[16] = //ethernet signal
         { 0xFF, 0xFF, 0x92, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
                 0xFF, 0xFF, 0xFF, 0xFF, 0xFF };
+
+const char *timeTypeStr[8] = {
+                "Stopped",
+                "Setuptime",
+                "Runtime",
+                "Auxiliary",
+                "Downtime",
+                "Pause",
+                "Unproduct",
+                "Stale"
+            };
+
 
 #define TAG "OLED"
 
@@ -87,7 +92,6 @@ void oled_write_data(SamplingMessage* msg, DeviceStatus* stat, int screenNo)
     char strBuffer[12];
     int upTimeDays, upTimeHrs, upTimeMin;
 
-
     switch (screenNo)
     {
     case 0:
@@ -117,6 +121,7 @@ void oled_write_data(SamplingMessage* msg, DeviceStatus* stat, int screenNo)
         }
         else
         {
+            ESP_LOGI(TAG, "Setting time type text: %d -> %s", msg->timeType, timeTypeStr[msg->timeType]);
             sprintf(oled_line, "TimeT:%9s", timeTypeStr[msg->timeType]);
         }
         iot_ssd1306_draw_string(ssd1306_dev, 0, 48, (const uint8_t *) oled_line, 16, 1);

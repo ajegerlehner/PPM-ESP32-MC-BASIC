@@ -9,6 +9,7 @@
 #include <stdio.h>
 #include "driver/i2c.h"
 #include "mc_common.h"
+#include "mc_io_expander_hal.h"
 #include "mc_pca9554a.h"
 
 #define TAG "PCA9554A"
@@ -52,11 +53,12 @@ int pca9554a_init()
 
 void pca9554a_set_pin(int _pin, int _pinValue)
 {
+	if(!deviceHWStatus.pca9554a_present)
+		return;
+
 	i2c_cmd_handle_t cmd = i2c_cmd_link_create();
 	int ret;
 
-	if(!deviceHWStatus.pca9554a_present)
-		return;
 
 	if (_pinValue == 0)
 	{

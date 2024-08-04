@@ -19,13 +19,20 @@ void init_devicve_status(DeviceStatus *status, char *deviceId, char *msgType);
 void create_status_msg(DeviceStatus *status, SamplingMessage *samplingMsg, char *statusTxt);
 void read_sensor_data(SamplingMessage *msg, DeviceConfig devConfig);
 float calc_speed(long counterDelta, long elapsedMS, float speedFactor);
+float calc_delta(long counterDelta, float counterFactor);
 void read_bme280_data(SamplingMessage *msg);
 TimeType calc_timeType(float speed, DeviceConfig devCfg);
 void signal_bat_low_status(bool _batLow);
 uint8_t read_tof_gesture();
+uint8_t read_button_press();
 void read_si7021_data(SamplingMessage *msg);
 uint8_t deviceHWStatusToNum(void);
 void setSetupTimeForced(uint8_t _val);
+void setCurrentTimeType(TimeType _current);
+void setStartupTimeType(DeviceConfig *devConfig);
+
+// to read processor temperature
+extern uint8_t temprature_sens_read();
 
 #endif
 

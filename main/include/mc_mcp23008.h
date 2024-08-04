@@ -1,5 +1,5 @@
-#ifndef _MC_MCP23017_H_
-#define _MC_MCP23017_H_
+#ifndef _MC_MCP23008_H_
+#define _MC_MCP23008_H_
 
 #include "esp_log.h"
 #include "esp_types.h"
@@ -36,7 +36,5 @@ void mcp23008b_signal_pin(int _pin, int _delay);
 void mcp23008_signal_pin(int _mcp23008d_pin, int _mcp23008b_pin, int _delay);
 void mcp23008_signal_boot_end();
 
-int8_t clear_port_bit(int8_t _register, int _bitNumber);
-int8_t set_port_bit(int8_t _register, int _bitNumber);
 
 #endif

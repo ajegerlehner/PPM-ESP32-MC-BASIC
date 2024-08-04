@@ -116,10 +116,14 @@ typedef struct BME280_READING
 
 typedef enum TIME_TYPE
 {
-    Stopped,
+    Stopped = 0,
     Setuptime,
     Runtime,
-    Downtime
+    Auxiliary,
+    Downtime,
+    Pause,
+    Unproductive,
+    Stale
 } TimeType;
 
 int serializeSamplingMessage(SamplingMessage* msg, char* jsonString);

@@ -76,7 +76,9 @@
             "cStandard": "c11",
             "cppStandard": "c++17",
             "intelliSenseMode": "clang-x64",
-            "compileCommands": "C:/esp-projects/ppm-esp32-mc/build/compile_commands.json"
+            "compileCommands": "C:/esp-projects/ppm-esp32-mc/build/compile_commands.json",
+            "configurationProvider": "ms-vscode.makefile-tools",
+            "compilerPath": "C:\\Users\\ajege\\.espressif\\tools\\xtensa-esp32-elf\\esp-2021r2-patch3-8.4.0\\xtensa-esp32-elf\\bin\\xtensa-esp32-elf-gcc.exe"
         }
     ],
     "version": 4

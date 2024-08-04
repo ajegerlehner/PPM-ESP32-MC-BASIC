@@ -27,8 +27,8 @@
  const int16_t SYSRANGE_PART_TO_PART_RANGE_OFFSET       = 0x0024;
  const int16_t RESULT__RANGE_RAW                        = 0x0064;   // 8 bit     
  const int16_t RESULT__RANGE_RETURN_RATE                = 0x0066;   // 9.7 format
- const int16_t GESTURE_THRESHOLD_MIN                    = 20;       // calibarated gesture detection threshold
- const int16_t GESTURE_THRESHOLD_MAX                    = 50;       // calibarated gesture detection threshold
+ const int16_t GESTURE_THRESHOLD_MIN                    = 60;       // calibarated gesture detection threshold
+ const int16_t GESTURE_THRESHOLD_MAX                    = 70;       // calibarated gesture detection threshold
 
 extern DeviceHWStatus deviceHWStatus;
 
@@ -139,7 +139,9 @@ uint8_t vl6180x_gesture()
 
     // clear interrupt
     write_data_byte(SYSTEM__INTERRUPT_CLEAR, 0x07);
-    
+
+    //ESP_LOGI(TAG, "Raw range mesurement is: %d", raw_range);
+
     if ((raw_range > GESTURE_THRESHOLD_MIN) && (raw_range < GESTURE_THRESHOLD_MAX))
     {
         ESP_LOGI(TAG, "Raw range mesurement is: %d", raw_range);

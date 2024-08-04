@@ -14,41 +14,47 @@
 #include "esp_ota_ops.h"
 #include "mc_sensor_data.h"
 #include "mc_data.h"
-#include "mc_stm32f04.h"
 #include "mc_mcp23008.h"
 #include "mc_gpio.h"
 #include "mc_device.h"
 #include "mc_i2c_bus.h"
 #include "iot_bme280.h"
 #include "mc_si7021.h"
-#include "mc_ds3231.h"
-#include "mc_iis328dq.h"
 #include "mc_vl6180x.h"
 #include "mc_common.h"
 #include "mc_eth.h"
 #include "mc_io_expander_hal.h"
 #include "mc_data.h"
+#include "mc_esp32counter.h"
+#include "mc_esp32_gpio.h"
+#include "mc_mcp23017.h"
 
 #define TAG "SENSOR"
 #define BME280_DELAY        300
 #define SI7021_DELAY        50
 #define MAX_STATUS_LEN      100
 #define MAX_SERIAL_LEN      30
+#define MAX_APPVERSION_LEN  20
 #define MAX_IP_ADDRESS_LEN  16
+#define MAX_C2D_LEN         20
+#define UNPROD_RUNTIM_FENCE 300
 
 const float BME280_SEALEVEL_PRESSURE = 1014.7f;
 
 static bme280_handle_t dev = NULL;
-static time_t lastTimeTypeCange;
+static time_t lastTimeTypeChange;
+static time_t rtTimeStart;
 static TimeType currentTimeType;
+static float lastSpeed;
 static uint8_t bme280_present;
-static uint8_t si7021_present;
 extern uint8_t wifiConnected;
+
+static CounterReading currentReading;
 
 extern DeviceHWStatus deviceHWStatus;
 
-// flag to track setup time or new operation 
-uint8_t setupTimeForced = 1;
+// flag to track setup time or new operation; at startup, no setup time should be forced. 
+uint8_t setupTimeForced = 0;
 
 void init_sensor_hardware()
 {
@@ -87,9 +93,8 @@ void init_sensor_hardware()
         }    
     }
 
-
-    // initialize IIS328DQ accelerometer / vibration sensor
-    iis328dq_init();
+    // initialize ESP32 counter gpio pins
+    esp32_init_counter_gpio();
     
     // initilize VL6180X gesture / proximity sensor
     vl6180x_init();
@@ -97,25 +102,28 @@ void init_sensor_hardware()
 
 void init_sensor_data(SamplingMessage *msg, char *deviceId, char *msgType)
 {
-    msg->iotDeviceId = malloc(strlen(deviceId));
+    msg->iotDeviceId = malloc(strlen(deviceId)+1);
     strcpy(msg->iotDeviceId, deviceId);
 
-    msg->msgType = malloc(strlen(msgType));
+    msg->msgType = malloc(strlen(msgType)+1);
     strcpy(msg->msgType, msgType);        
 }
 
 void init_devicve_status(DeviceStatus *status, char *deviceId, char *msgType)
 {
-    status->iotDeviceId = malloc(strlen(deviceId));
+    status->iotDeviceId = malloc(strlen(deviceId)+1);
     strcpy(status->iotDeviceId, deviceId);
 
-    status->msgType = malloc(strlen(msgType));
+    status->msgType = malloc(strlen(msgType)+1);
     strcpy(status->msgType, msgType);
 
-    status->statusMsg = malloc(MAX_STATUS_LEN);
-    status->serialNo = malloc(MAX_SERIAL_LEN);
+    status->statusMsg = malloc(MAX_STATUS_LEN+1);
+    status->serialNo = malloc(MAX_SERIAL_LEN+1);
+    status->appVersion = malloc(MAX_APPVERSION_LEN+1);
 
-    status->deviceIPAddress = malloc(MAX_IP_ADDRESS_LEN);
+    status->lastCloudToDeviceMsg = malloc(MAX_C2D_LEN+1);
+    
+    status->deviceIPAddress = malloc(MAX_IP_ADDRESS_LEN+1);
 }
 
 void create_status_msg(DeviceStatus *status, SamplingMessage *samplingMsg, char *statusTxt)
@@ -136,11 +144,12 @@ void create_status_msg(DeviceStatus *status, SamplingMessage *samplingMsg, char 
     status->msgNum++;
     status->upTime = esp_timer_get_time()/ 1000 / 1000;
     status->azureMsgSent = samplingMsg->msgNum;
-    status->hwRevision = stm32_hw_revision_uart();  
-    status->peripherialStatus = deviceHWStatusToNum();
-    status->appVersion = ota_app_desc->version;
+    status->hwRevision = esp32cnt_hw_revision();  
+    status->peripherialStatus = deviceHWStatusToNum();    
     status->lastOTAUpdate = otaTime;
-    
+
+    sprintf(status->appVersion, "%s", ota_app_desc->version);
+
     // serial number is MAC adress of the esp32 chip
     esp_read_mac(macAdress, 0);
     sprintf(status->serialNo, "%x:%x:%x:%x:%x:%x", macAdress[0], macAdress[1], macAdress[2], macAdress[3], macAdress[4], macAdress[5]);
@@ -148,45 +157,27 @@ void create_status_msg(DeviceStatus *status, SamplingMessage *samplingMsg, char 
     sprintf(status->deviceIPAddress, "%15s", getDeviceIPAddress());
     status->wifiConnected = wifiConnected;
     
-    strncpy(status->statusMsg, statusTxt, MAX_STATUS_LEN-1);
+    strncpy(status->statusMsg, statusTxt, MAX_STATUS_LEN);
 
     freeHeapSize = esp_get_free_heap_size();
     status->heapSize = freeHeapSize;
 
-    status->processorTemperature = ds3231_get_temperature();
+    status->processorTemperature = (float)temprature_sens_read();
 
-    status->rtcBatteryLow = !ds3231_get_rtcBatteryStatus();
-    signal_bat_low_status(status->rtcBatteryLow);
-}
-
-void signal_bat_low_status(bool _batLow)
-{
-    if (_batLow)
-    {
-        io_expander_set_pin(SIGNAL_PIN_LOWBAT_GREEN, 0);
-        io_expander_set_pin(SIGNAL_PIN_LOWBAT_RED, 1);
-    }
-    else
-    {
-        io_expander_set_pin(SIGNAL_PIN_LOWBAT_GREEN, 1);
-        io_expander_set_pin(SIGNAL_PIN_LOWBAT_RED, 0);
-    }
-    
+    status->rtcBatteryLow = 0;
 }
 
 void read_sensor_data(SamplingMessage *msg, DeviceConfig devConfig)
 {
-    CounterReading currentReading;
-    time_t now;
     uint32_t freeHeapSize;
+    
 
     // get counter readings in sampling message
     io_expander_signal_pin(SIGNAL_PIN_MC);
-    time(&now);
-    msg->timeStamp      = now;
+    time(&msg->timeStamp);
 
-    stm32_read_counters_uart(&currentReading);
-
+    esp32cnt_read_counters(&currentReading);
+    
     msg->msgNum++;
 
     // absolute counters
@@ -216,9 +207,14 @@ void read_sensor_data(SamplingMessage *msg, DeviceConfig devConfig)
 
     msg->speed          = calc_speed(msg->counterDelta1, msg->elapseTime, devConfig.speedFactor);
 
+    if(devConfig.counterFactor != 1)
+    {
+        msg->counterDelta1 = calc_delta(msg->counterDelta1, devConfig.counterFactor);
+    }
+
     msg->timeType       = calc_timeType(msg->speed, devConfig);
 
-    if (msg->timeType == Downtime)
+    if (msg->timeType == Auxiliary)
     {
         io_expander_set_pin(SIGNAL_PIN_PLCOUT, 1);
     }
@@ -226,7 +222,6 @@ void read_sensor_data(SamplingMessage *msg, DeviceConfig devConfig)
     {
         io_expander_set_pin(SIGNAL_PIN_PLCOUT, 0);
     }
-    
     
     // if BME280 is installed, use this sensor, otherwise try if SI7021 ist installed
     if (deviceHWStatus.bme280_present)
@@ -248,14 +243,10 @@ void read_sensor_data(SamplingMessage *msg, DeviceConfig devConfig)
         msg->humidity = 0.0;
     }
     
-
-    iis328dq_read_data(msg);
-
     freeHeapSize = esp_get_free_heap_size();
     msg->freeHeapSize = freeHeapSize;
 
-    msg->rtd_temperature = ds3231_get_temperature();
-
+    msg->rtd_temperature = 0.0;
 }
 
 void read_bme280_data(SamplingMessage *msg)
@@ -314,20 +305,47 @@ float calc_speed(long counterDelta, long elapsedMS, float speedFactor)
     return decRound3(retVal);
 }
 
+float calc_delta(long counterDelta, float counterFactor)
+{
+    float retVal;
+
+    ESP_LOGI(TAG, "Delta calculation: counterDelta: %ld, counterFactor: %f", counterDelta, counterFactor);
+
+    if (counterFactor > 0)
+    {
+        retVal = counterDelta * counterFactor; 
+    }
+    else 
+    {
+        retVal = counterDelta;
+    }
+    return decRound3(retVal);
+}
+
+
 TimeType calc_timeType(float speed, DeviceConfig devCfg)
 {
     int timeTypeDuration;
+    int rtTimeDuration = 0;
     time_t currentTime;
 
     time(&currentTime);
-    if (lastTimeTypeCange == 0)
+    if (lastTimeTypeChange == 0)
     {
         timeTypeDuration = 0;
-        lastTimeTypeCange = currentTime;
+        lastTimeTypeChange = currentTime;
+        lastSpeed = speed;
     }
     else
     {
-        timeTypeDuration = currentTime - lastTimeTypeCange;
+        timeTypeDuration = currentTime - lastTimeTypeChange;
+    }
+
+    if ((speed > 0 && lastSpeed == 0) || (speed == 0 && lastSpeed > 0))
+    {
+        timeTypeDuration = 0;
+        lastTimeTypeChange = currentTime;
+        lastSpeed = speed;
     }
 
     ESP_LOGI(TAG, "TimeTypeDuration is: %d, current time type: %d, setupTimeForced: %d", timeTypeDuration, currentTimeType, setupTimeForced);
@@ -336,7 +354,8 @@ TimeType calc_timeType(float speed, DeviceConfig devCfg)
     if (setupTimeForced && (speed >= devCfg.runtimeRate) && (timeTypeDuration > devCfg.runtimeTimeFence))
     {
         setSetupTimeForced(0);
-        lastTimeTypeCange = currentTime;
+        lastTimeTypeChange = currentTime;
+        lastSpeed = speed;
         currentTimeType = Runtime;
         ESP_LOGI(TAG, "Setuptime forced reset: TimeTypeDuration is: %d, current time type: %d", timeTypeDuration, currentTimeType);
         return currentTimeType;
@@ -350,50 +369,75 @@ TimeType calc_timeType(float speed, DeviceConfig devCfg)
     // if Setuptime is not forced, follow state transition logic
     switch (currentTimeType)
     {
-        case Stopped:
+        case Stopped:            
+        case Pause:
+        case Auxiliary:
         case Downtime:
-            if ((speed >= devCfg.setuptimeRate && speed <= devCfg.runtimeRate) && (timeTypeDuration > devCfg.setuptimeTimeFence))
+            //if ((speed >= devCfg.setuptimeRate && speed <= devCfg.runtimeRate) && (timeTypeDuration > devCfg.setuptimeTimeFence))
+            //{
+            //    lastTimeTypeChange = currentTime;
+            //    currentTimeType = Setuptime;
+            //    return currentTimeType;
+            //}
+            //else 
+            if ((speed >= devCfg.runtimeRate) && (timeTypeDuration > devCfg.runtimeTimeFence))
             {
-                lastTimeTypeCange = currentTime;
-                currentTimeType = Setuptime;
-                return currentTimeType;
-            }
-            else if ((speed >= devCfg.runtimeRate) && (timeTypeDuration > devCfg.runtimeTimeFence))
-            {
-                lastTimeTypeCange = currentTime;
+                lastTimeTypeChange = currentTime;
                 currentTimeType = Runtime;
                 return currentTimeType;
             }
             else if ((currentTimeType == Stopped) && (timeTypeDuration > devCfg.downtimeTimeFence))
             {
-                currentTimeType = Downtime;
+                currentTimeType = Auxiliary;
                 return currentTimeType;
+            }
+            break;
+        case Unproductive:
+            if (rtTimeStart)
+            {
+                rtTimeDuration = currentTime - rtTimeStart;
+            }
+
+            if ((speed >= devCfg.runtimeRate) && (rtTimeDuration == 0))
+            {
+                time(&rtTimeStart);
+                rtTimeDuration = 1;
+                ESP_LOGI(TAG, "Runtime during unproductive time start: rtTimeDuration: %d", rtTimeDuration);
+            }
+            else if ((speed >= devCfg.runtimeRate) && rtTimeDuration > 0)
+            {
+                ESP_LOGI(TAG, "Runtime during unproductive time cont: rtTimeDuration: %d", rtTimeDuration);
+                if (rtTimeDuration > UNPROD_RUNTIM_FENCE)
+                {
+                    lastTimeTypeChange = currentTime;
+                    currentTimeType = Runtime;
+                    rtTimeDuration = 0;
+                    return currentTimeType;                    
+                }
+            }            
+            else if (speed == 0)
+            {
+                rtTimeDuration = 0;
+                rtTimeStart = 0;
+                ESP_LOGI(TAG, "Runtime during unproductive time stop: rtTimeDuration: %d", rtTimeDuration);
             }
             break;
         case Setuptime:
-            if ((speed < devCfg.setuptimeRate) && (timeTypeDuration > devCfg.setuptimeTimeFence))
+            if ((speed >= devCfg.runtimeRate) && (timeTypeDuration > devCfg.setuptimeTimeFence))
             {
-                lastTimeTypeCange = currentTime;
-                currentTimeType = Stopped;
-                return currentTimeType;
-            }
-            else if ((speed >= devCfg.runtimeRate) && (timeTypeDuration > devCfg.runtimeTimeFence))
-            {
-                lastTimeTypeCange = currentTime;
+                lastTimeTypeChange = currentTime;
                 currentTimeType = Runtime;
                 return currentTimeType;
             }
+            else if ((speed < devCfg.runtimeRate))
+            {
+                lastTimeTypeChange = currentTime;
+            }
             break;
         case Runtime:
-            if ((speed < devCfg.runtimeRate && speed > devCfg.setuptimeRate) && (timeTypeDuration > devCfg.runtimeTimeFence))
+            if (speed < devCfg.setuptimeRate && timeTypeDuration > devCfg.stoppedTimeFence)
             {
-                lastTimeTypeCange = currentTime;
-                currentTimeType = Setuptime;
-                return currentTimeType;
-            }
-            else if (speed < devCfg.setuptimeRate && timeTypeDuration > devCfg.stoppedTimeFence)
-            {
-                lastTimeTypeCange = currentTime;
+                lastTimeTypeChange = currentTime;
                 currentTimeType = Stopped;
                 return currentTimeType;
             }
@@ -411,6 +455,21 @@ void setSetupTimeForced(uint8_t _val)
     setupTimeForced = _val;
 }
 
+void setCurrentTimeType(TimeType _current)
+{
+    currentTimeType = _current;
+}
+
+void setStartupTimeType(DeviceConfig *cfg)
+{
+    if (cfg->lastTimeType == Stale)
+        currentTimeType = Unproductive;
+    else
+        currentTimeType = cfg->lastTimeType;
+
+    ESP_LOGI(TAG, "Setting startup time type to: %d", currentTimeType);
+}
+
 uint8_t read_tof_gesture()
 {
     uint8_t ret;
@@ -418,5 +477,23 @@ uint8_t read_tof_gesture()
     ret = vl6180x_gesture();
 
     // ret = 1 - gesture detected, else ret = 0
+    return ret;
+}
+
+uint8_t read_button_press()
+{
+    uint8_t ret;
+
+    if (mcp23017_pin_changed(&ret))
+    {
+        ESP_LOGI(TAG, "Pin pressed: %02x", ret);
+    }
+
+
+    // ret = 0 - no press
+    // ret = 1 - Home button
+    // ret = 2 - FWD button
+    // ret = 4 - BCK button
+
     return ret;
 }
