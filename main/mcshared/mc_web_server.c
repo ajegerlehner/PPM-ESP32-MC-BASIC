@@ -74,7 +74,6 @@
  static esp_err_t on_wifi_set_uri(httpd_req_t *req)
  {
      char buf[150];
-     BaseType_t taskResult;
      RebootStruct reboot;
      
      ESP_LOGI(TAG, "WiFi set endpoint: web server url %s was hit. Content length: %d", req->uri, req->content_len);
