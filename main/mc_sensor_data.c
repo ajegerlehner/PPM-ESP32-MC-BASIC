@@ -328,8 +328,18 @@ TimeType calc_timeType(float speed, DeviceConfig devCfg)
     int timeTypeDuration;
     int rtTimeDuration = 0;
     time_t currentTime;
+    time_t startOfDay;
+    int daySeconds;  // seconds since start of day
+    struct tm *dayTime = NULL;
 
     time(&currentTime);
+
+    dayTime = gmtime(&currentTime);
+    dayTime->tm_sec = dayTime->tm_min = dayTime->tm_hour = 0;
+    startOfDay = mktime(dayTime);
+
+    daySeconds = currentTime - startOfDay;
+
     if (lastTimeTypeChange == 0)
     {
         timeTypeDuration = 0;
@@ -348,7 +358,7 @@ TimeType calc_timeType(float speed, DeviceConfig devCfg)
         lastSpeed = speed;
     }
 
-    ESP_LOGI(TAG, "TimeTypeDuration is: %d, current time type: %d, setupTimeForced: %d", timeTypeDuration, currentTimeType, setupTimeForced);
+    ESP_LOGI(TAG, "TimeTypeDuration is: %d, Seconds in day: %d, Day shift end seconds: %d, current time type: %d, setupTimeForced: %d", timeTypeDuration, daySeconds, devCfg.dayShiftEndSec, currentTimeType, setupTimeForced);
 
     // if setupTimeForced is true, we always return Setuptime, unless Runtime was entered
     if (setupTimeForced && (speed >= devCfg.runtimeRate) && (timeTypeDuration > devCfg.runtimeTimeFence))
@@ -373,13 +383,6 @@ TimeType calc_timeType(float speed, DeviceConfig devCfg)
         case Pause:
         case Auxiliary:
         case Downtime:
-            //if ((speed >= devCfg.setuptimeRate && speed <= devCfg.runtimeRate) && (timeTypeDuration > devCfg.setuptimeTimeFence))
-            //{
-            //    lastTimeTypeChange = currentTime;
-            //    currentTimeType = Setuptime;
-            //    return currentTimeType;
-            //}
-            //else 
             if ((speed >= devCfg.runtimeRate) && (timeTypeDuration > devCfg.runtimeTimeFence))
             {
                 lastTimeTypeChange = currentTime;
@@ -389,6 +392,13 @@ TimeType calc_timeType(float speed, DeviceConfig devCfg)
             else if ((currentTimeType == Stopped) && (timeTypeDuration > devCfg.downtimeTimeFence))
             {
                 currentTimeType = Auxiliary;
+                return currentTimeType;
+            }
+            if (currentTimeType == Auxiliary && devCfg.dayShiftEndSec > 0 && daySeconds > devCfg.dayShiftEndSec)
+            {
+                // Auxiliary time after day shift end, force Unproductive time
+                ESP_LOGI(TAG, "Auxiliary time after day shift end (%d seconds), setting Unproductive time", devCfg.dayShiftEndSec);
+                currentTimeType = Unproductive;
                 return currentTimeType;
             }
             break;

@@ -3,7 +3,7 @@
 cmake_minimum_required(VERSION 3.5)
 
 
-set(PROJECT_VER "2.0.24.21801")
+set(PROJECT_VER "2.0.24.33601")
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 set(use_mqtt ON)
 project(ppm-esp32-mc-basic)
