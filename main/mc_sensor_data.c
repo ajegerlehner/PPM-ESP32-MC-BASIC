@@ -335,10 +335,11 @@ TimeType calc_timeType(float speed, DeviceConfig devCfg)
     time(&currentTime);
 
     dayTime = gmtime(&currentTime);
-    dayTime->tm_sec = dayTime->tm_min = dayTime->tm_hour = 0;
-    startOfDay = mktime(dayTime);
+    //dayTime->tm_sec = dayTime->tm_min = dayTime->tm_hour = 0;
+    //startOfDay = mktime(dayTime);
 
-    daySeconds = currentTime - startOfDay;
+    //daySeconds = currentTime - startOfDay;
+    daySeconds = dayTime->tm_hour * 3600 + dayTime->tm_min * 60 + dayTime->tm_sec;
 
     if (lastTimeTypeChange == 0)
     {
