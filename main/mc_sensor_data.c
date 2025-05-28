@@ -395,6 +395,13 @@ TimeType calc_timeType(float speed, DeviceConfig devCfg)
                 currentTimeType = Auxiliary;
                 return currentTimeType;
             }
+            if (currentTimeType == Auxiliary && devCfg.midShiftEndSec > 0 && daySeconds > devCfg.midShiftEndSec && daySeconds < (devCfg.midShiftEndSec + devCfg.stoppedTimeFence))
+            {
+                // Auxiliary time after mid shift end, but before auxiliary time fence, force Auxiliary time
+                ESP_LOGI(TAG, "Auxiliary time after mid shift end (%d seconds), setting Unproductive time", devCfg.midShiftEndSec);
+                currentTimeType = Unproductive;
+                return currentTimeType;
+            }
             if (currentTimeType == Auxiliary && devCfg.dayShiftEndSec > 0 && daySeconds > devCfg.dayShiftEndSec)
             {
                 // Auxiliary time after day shift end, force Unproductive time

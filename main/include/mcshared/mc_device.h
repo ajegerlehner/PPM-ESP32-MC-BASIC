@@ -30,6 +30,7 @@ typedef struct IOT_DEVICE_CONFIG
     uint16_t downtimeTimeFence;
     uint16_t lastTimeType;
     uint32_t dayShiftEndSec;
+    uint32_t midShiftEndSec;
 } DeviceConfig;
 
 

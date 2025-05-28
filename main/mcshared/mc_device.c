@@ -52,6 +52,7 @@ void deserializeDeviceConfig(char *jsonStr)
     deviceConfig.watchdogTimeFence = assign_json_tag_uint16(payload, "watchDogTimer");
     deviceConfig.lastTimeType = assign_json_tag_uint16(payload, "lastTimeType");
     deviceConfig.dayShiftEndSec = assign_json_tag_uint32(payload, "DayShiftEndSec");    
+    deviceConfig.midShiftEndSec = assign_json_tag_uint32(payload, "MidShiftEndSec");    
     
 
     // clean up memory
