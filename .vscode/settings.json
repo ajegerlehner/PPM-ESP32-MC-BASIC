@@ -32,5 +32,8 @@
   "idf.openOcdConfigs": [
     "interface/ftdi/esp32_devkitj_v1.cfg",
     "target/esp32.cfg"
-  ]
+  ],
+  "idf.espIdfPathWin": "C:/Users/ajege/esp442/",
+  "idf.toolsPathWin": "C:\\Users\\ajege\\.espressif",
+  "idf.pythonInstallPath": "C:\\Users\\ajege\\.espressif\\tools\\idf-python\\3.8.7\\python.exe"
 }

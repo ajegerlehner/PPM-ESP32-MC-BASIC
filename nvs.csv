@@ -1,0 +1,6 @@
+key,type,encoding,value
+StoragePPM,namespace
+NODENAME,data,string,rle0006
+SSID,data,string,
+SSIDPWD,data,string,
+
