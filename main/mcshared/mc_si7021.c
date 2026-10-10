@@ -94,7 +94,7 @@ float si7021_read_humidity()
 	i2c_master_write_byte(cmd, (SI7021_ADDR << 1) | I2C_MASTER_WRITE, true);
 	i2c_master_write_byte(cmd, SI7021_HUMIDITY_REGISTER, true);
 	i2c_master_stop(cmd);
-	ret = i2c_master_cmd_begin(si7021_dev.port, cmd, 1000 / portTICK_RATE_MS);
+	ret = i2c_master_cmd_begin(si7021_dev.port, cmd, 1000 / portTICK_PERIOD_MS);
 	i2c_cmd_link_delete(cmd);
 	if (ret == ESP_FAIL) 
 	{
@@ -104,7 +104,7 @@ float si7021_read_humidity()
 
 
 	// wait for the sensor (50ms)
-	vTaskDelay(50 / portTICK_RATE_MS);
+	vTaskDelay(50 / portTICK_PERIOD_MS);
 
 	// receive the answer
 	uint8_t msb, lsb, crc;
@@ -115,7 +115,7 @@ float si7021_read_humidity()
 	i2c_master_read_byte(cmd, &lsb, 0x00);
 	i2c_master_read_byte(cmd, &crc, 0x01);
 	i2c_master_stop(cmd);
-	ret = i2c_master_cmd_begin(si7021_dev.port, cmd, 1000 / portTICK_RATE_MS);
+	ret = i2c_master_cmd_begin(si7021_dev.port, cmd, 1000 / portTICK_PERIOD_MS);
 	i2c_cmd_link_delete(cmd);
 
 	if (ret == ESP_FAIL) 
@@ -142,7 +142,7 @@ float si7021_read_temperature()
 	i2c_master_write_byte(cmd, (SI7021_ADDR << 1) | I2C_MASTER_WRITE, true);
 	i2c_master_write_byte(cmd, SI7021_TEMP_REGISTER, true);
 	i2c_master_stop(cmd);
-	ret = i2c_master_cmd_begin(si7021_dev.port, cmd, 1000 / portTICK_RATE_MS);
+	ret = i2c_master_cmd_begin(si7021_dev.port, cmd, 1000 / portTICK_PERIOD_MS);
 	i2c_cmd_link_delete(cmd);
 	if (ret == ESP_FAIL) 
 	{
@@ -152,7 +152,7 @@ float si7021_read_temperature()
 
 
 	// wait for the sensor (50ms)
-	vTaskDelay(50 / portTICK_RATE_MS);
+	vTaskDelay(50 / portTICK_PERIOD_MS);
 
 	// receive the answer
 	uint8_t msb, lsb, crc;
@@ -163,7 +163,7 @@ float si7021_read_temperature()
 	i2c_master_read_byte(cmd, &lsb, 0x00);
 	i2c_master_read_byte(cmd, &crc, 0x01);
 	i2c_master_stop(cmd);
-	ret = i2c_master_cmd_begin(si7021_dev.port, cmd, 1000 / portTICK_RATE_MS);
+	ret = i2c_master_cmd_begin(si7021_dev.port, cmd, 1000 / portTICK_PERIOD_MS);
 	i2c_cmd_link_delete(cmd);
 
 	if (ret == ESP_FAIL) 

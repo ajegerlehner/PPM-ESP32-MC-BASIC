@@ -31,7 +31,7 @@ int pca9554a_init()
 	i2c_master_write_byte(cmd, PCA9554A_CONFIG_REG, ACK_CHECK_EN);					// PCA9554A config register
 	i2c_master_write_byte(cmd, PCA9554A_PORT_CFG, ACK_CHECK_EN);					//Set all ports as outputs
 	i2c_master_stop(cmd);
-	ret = i2c_master_cmd_begin(I2C_MASTER_NUM, cmd, 1000 / portTICK_RATE_MS);
+	ret = i2c_master_cmd_begin(I2C_MASTER_NUM, cmd, 1000 / portTICK_PERIOD_MS);
 	i2c_cmd_link_delete(cmd);
 
 	if (ret == ESP_FAIL) 
@@ -74,7 +74,7 @@ void pca9554a_set_pin(int _pin, int _pinValue)
 	i2c_master_write_byte(cmd, PCA9554A_OUTPUT_REG, ACK_CHECK_EN);
 	i2c_master_write_byte(cmd, pca9554a_port_register, ACK_CHECK_EN);
 	i2c_master_stop(cmd);
-	ret = i2c_master_cmd_begin(I2C_MASTER_NUM, cmd, 1000 / portTICK_RATE_MS);
+	ret = i2c_master_cmd_begin(I2C_MASTER_NUM, cmd, 1000 / portTICK_PERIOD_MS);
 	i2c_cmd_link_delete(cmd);
 
 	if (ret == ESP_FAIL)

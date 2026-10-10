@@ -34,17 +34,16 @@ config PPM_IOT_HARDWARE_VERSION
 	help
 		PPM IoT PCB Version
 		
-config PPM_IOT_PROTOCOL
-	choice 
-		bool "IoT event hub communication protocol"
-		default PPM_IOT_MQTT_WEBSOCKETS
-		help
-			IoT protocol to use, MQTT or MQTT_WEBSOCKETS
-			
-		config PPM_IOT_MQTT
-			bool "Use MQTT protocol"
-		config PPM_IOT_MQTT_WEBSOCKETS
-			bool "Use MQTT Websockets protocol"
-	endchoice
+choice PPM_IOT_PROTOCOL
+	prompt "IoT event hub communication protocol"
+	default PPM_IOT_MQTT_WEBSOCKETS
+	help
+		IoT protocol to use, MQTT or MQTT_WEBSOCKETS
+
+	config PPM_IOT_MQTT
+		bool "Use MQTT protocol"
+	config PPM_IOT_MQTT_WEBSOCKETS
+		bool "Use MQTT Websockets protocol"
+endchoice
 
 endmenu

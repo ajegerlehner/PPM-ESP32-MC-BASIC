@@ -12,6 +12,7 @@
 #include <stdlib.h>
 
 #include "esp_http_client.h"
+#include "esp_crt_bundle.h"
 #include "esp_log.h"
 
 #include "mc_device.h"
@@ -68,7 +69,8 @@ void get_device_config(char *deviceId)
     esp_http_client_config_t clientConfig = {
         .url = CONFIG_PPM_IOT_CENTRAL_URL,
         .method = HTTP_METHOD_POST,         
-        .event_handler = clientEventHandler
+        .event_handler = clientEventHandler,
+        .crt_bundle_attach = esp_crt_bundle_attach
     };
 
     // create http client

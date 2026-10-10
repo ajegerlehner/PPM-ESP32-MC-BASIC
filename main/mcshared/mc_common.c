@@ -8,7 +8,8 @@
 
 #include "nvs_flash.h"
 #include "nvs.h"
-#include "esp_int_wdt.h"
+#include "esp_netif.h"
+#include "esp_netif_sntp.h"
 #include "esp_task_wdt.h"
 
 #include "mc_common.h"
@@ -28,13 +29,11 @@
 #define MAX_IPADDRESS_LEN 16
 #define REBOOT_DELAY    10
 
-//Declare static prototype
-static esp_err_t esp32_event_handler(void *ctx, system_event_t *event);
-
 //WIFI settings
 static EventGroupHandle_t wifi_event_grp;
 static int wifi_retry_num = 0;
-static ip4_addr_t* esp32_ip_addr;
+static esp_netif_t *wifi_sta_netif;
+static esp_netif_t *wifi_ap_netif;
 
 extern DeviceStatus deviceStatus;
 extern SamplingMessage samplingMsg;
@@ -45,60 +44,56 @@ extern int internetConnected;
 extern uint8_t wifiConnected;
 
 /******************************************************************************
- * FunctionName : esp32_event_handler
- * Description  : Callback to handle base level events from the ESP32 
- *                System Start, WIFI, etc. 
- * Parameters   : *ctx (void) 
- *                *event (system_event_t)
- * Returns      : esp_err_t
+ * FunctionName : wifi_event_handler
+ * Description  : Callback to handle WiFi station events and the
+ *                IP address assignment of the WiFi station
+ * Parameters   : *arg (void) 
+ *                event_base (esp_event_base_t)
+ *                event_id (int32_t)
+ *                *event_data (void)
+ * Returns      : void
 *******************************************************************************/
 
-static esp_err_t esp32_event_handler(void *ctx, system_event_t *event)
+static void wifi_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data)
 {
-    switch(event->event_id) 
+    if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START)
     {
-        case SYSTEM_EVENT_STA_START:
-            esp_wifi_connect();
-            break;
-
-        case SYSTEM_EVENT_STA_GOT_IP:
-           if (!deviceIPAddress)
-            {
-                deviceIPAddress = malloc(sizeof(char)* MAX_IPADDRESS_LEN);
-                ESP_LOGW(TAG,"malloc deviceIPaddress"); //todo
-                sprintf(deviceIPAddress, "%15s", ip4addr_ntoa(&event->event_info.got_ip.ip_info.ip));
-                internetConnected = 1;
-                wifiConnected = 1;
-            }
-            ESP_LOGI(TAG, "got ip:%s",
-                    ip4addr_ntoa(&event->event_info.got_ip.ip_info.ip));
-            esp32_ip_addr = &event->event_info.got_ip.ip_info.ip;	
-            wifi_retry_num = 0;
-            xEventGroupSetBits(wifi_event_grp, WIFI_CONNECTED_BIT);
-            break;
-
-        case SYSTEM_EVENT_STA_DISCONNECTED:
-            ESP_LOGI(TAG,"Event State: Disconnected from WiFi");
-
-            if (wifi_retry_num < ESP_WIFI_MAXIMUM_RETRY) 
-            {
-                esp_wifi_connect();
-                xEventGroupClearBits(wifi_event_grp, WIFI_CONNECTED_BIT);
-                wifi_retry_num++;
-                ESP_LOGI(TAG,"Retry connecting to the WiFi AP");
-            }
-            else 
-            {
-                ESP_LOGE(TAG,"Connection to the WiFi AP failure\n");
-            }
-            break;
-            
-
-        default:
-            break;
+        esp_wifi_connect();
     }
-    
-    return ESP_OK;
+    else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP)
+    {
+        ip_event_got_ip_t *event = (ip_event_got_ip_t *)event_data;
+        char ipStr[MAX_IPADDRESS_LEN];
+
+        esp_ip4addr_ntoa(&event->ip_info.ip, ipStr, sizeof(ipStr));
+        if (!deviceIPAddress)
+        {
+            deviceIPAddress = malloc(sizeof(char)* MAX_IPADDRESS_LEN);
+            ESP_LOGW(TAG,"malloc deviceIPaddress"); //todo
+            sprintf(deviceIPAddress, "%15s", ipStr);
+            internetConnected = 1;
+            wifiConnected = 1;
+        }
+        ESP_LOGI(TAG, "got ip:%s", ipStr);
+        wifi_retry_num = 0;
+        xEventGroupSetBits(wifi_event_grp, WIFI_CONNECTED_BIT);
+    }
+    else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED)
+    {
+        ESP_LOGI(TAG,"Event State: Disconnected from WiFi");
+
+        if (wifi_retry_num < ESP_WIFI_MAXIMUM_RETRY) 
+        {
+            esp_wifi_connect();
+            xEventGroupClearBits(wifi_event_grp, WIFI_CONNECTED_BIT);
+            wifi_retry_num++;
+            ESP_LOGI(TAG,"Retry connecting to the WiFi AP");
+        }
+        else 
+        {
+            ESP_LOGE(TAG,"Connection to the WiFi AP failure\n");
+        }
+    }
 }
 /******************************************************************************
  * FunctionName : nvs_init
@@ -138,9 +133,13 @@ esp_err_t wifi_init()
     //Initialize WiFi
     wifi_event_grp = xEventGroupCreate();
 
-    //tcpip_adapter_init();
+    // network interfaces for station and config (AP) mode
+    if (wifi_sta_netif == NULL)
+    {
+        wifi_sta_netif = esp_netif_create_default_wifi_sta();
+        wifi_ap_netif = esp_netif_create_default_wifi_ap();
+    }
 
-    //ESP_ERROR_CHECK(esp_event_loop_init(esp32_event_handler, NULL));
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
     ESP_ERROR_CHECK(esp_wifi_init(&cfg));
     
@@ -188,11 +187,11 @@ esp_err_t wifi_init()
 
     //Check for errors
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
-    ESP_ERROR_CHECK(esp_wifi_set_config(ESP_IF_WIFI_STA, &wifi_config) );
+    ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config) );
     ESP_ERROR_CHECK(esp_wifi_start());
 
     ESP_LOGI(TAG, "wifi_init finished.");
-    ESP_LOGI(TAG, "Connected to WiFi AP-SSID:%s password:%s", ssid, ssid_pwd);
+    ESP_LOGI(TAG, "Connected to WiFi AP-SSID:%s", ssid);
  
     return ESP_OK;
 }
@@ -215,18 +214,22 @@ esp_err_t enter_config_mode()
         }
     };
 
-    ESP_ERROR_CHECK(tcpip_adapter_dhcps_stop(TCPIP_ADAPTER_IF_AP));
+    esp_err_t ret = esp_netif_dhcps_stop(wifi_ap_netif);
+    if (ret != ESP_ERR_ESP_NETIF_DHCP_ALREADY_STOPPED)
+    {
+        ESP_ERROR_CHECK(ret);
+    }
 
-    tcpip_adapter_ip_info_t ip_info;
+    esp_netif_ip_info_t ip_info;
     memset(&ip_info, 0, sizeof(ip_info));
-    IP4_ADDR(&(ip_info.ip), 192,168,1,99);
-    IP4_ADDR(&(ip_info.gw), 192,168,1,99);
-    IP4_ADDR(&(ip_info.netmask), 255,255,255,0);
-    ESP_ERROR_CHECK(tcpip_adapter_set_ip_info(TCPIP_ADAPTER_IF_AP, &ip_info));
-    ESP_ERROR_CHECK(tcpip_adapter_dhcps_start(TCPIP_ADAPTER_IF_AP));
+    esp_netif_set_ip4_addr(&ip_info.ip, 192,168,1,99);
+    esp_netif_set_ip4_addr(&ip_info.gw, 192,168,1,99);
+    esp_netif_set_ip4_addr(&ip_info.netmask, 255,255,255,0);
+    ESP_ERROR_CHECK(esp_netif_set_ip_info(wifi_ap_netif, &ip_info));
+    ESP_ERROR_CHECK(esp_netif_dhcps_start(wifi_ap_netif));
 
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_AP));
-    ESP_ERROR_CHECK(esp_wifi_set_config(ESP_IF_WIFI_AP, &wifi_config) );
+    ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &wifi_config) );
     ESP_ERROR_CHECK(esp_wifi_start());
 
     // setup web server to configure wifi settings
@@ -248,11 +251,45 @@ esp_err_t enter_config_mode()
 
 esp_err_t prepare_network()
 {
-    tcpip_adapter_init();
+    ESP_ERROR_CHECK(esp_netif_init());
 
-    ESP_ERROR_CHECK(esp_event_loop_init(esp32_event_handler, NULL));
+    ESP_ERROR_CHECK(esp_event_loop_create_default());
+    ESP_ERROR_CHECK(esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID, &wifi_event_handler, NULL));
+    ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP, &wifi_event_handler, NULL));
 
     return ESP_OK;
+}
+
+void wait_for_network_time()
+{
+    esp_sntp_config_t sntpConfig = ESP_NETIF_SNTP_DEFAULT_CONFIG("pool.ntp.org");
+    int retry = 0;
+
+    ESP_LOGI(TAG, "Initializing SNTP");
+    ESP_ERROR_CHECK(esp_netif_sntp_init(&sntpConfig));
+
+    while (esp_netif_sntp_sync_wait(2 * ONE_SECOND_DELAY) == ESP_ERR_TIMEOUT)
+    {
+        ESP_LOGI(TAG, "Waiting for system time to be set... [times:%d]", ++retry);
+    }
+}
+
+esp_err_t task_wdt_set_timeout(uint32_t timeoutSec)
+{
+    esp_task_wdt_config_t wdtConfig = {
+        .timeout_ms = timeoutSec * 1000,
+        .idle_core_mask = (1 << portNUM_PROCESSORS) - 1,
+        .trigger_panic = true
+    };
+
+    // task watchdog is already started at boot if enabled in sdkconfig
+    esp_err_t ret = esp_task_wdt_reconfigure(&wdtConfig);
+    if (ret == ESP_ERR_INVALID_STATE)
+    {
+        ret = esp_task_wdt_init(&wdtConfig);
+    }
+
+    return ret;
 }
 
 esp_err_t nvs_read_str_value(const char *keyName, char **retString)
@@ -435,20 +472,6 @@ esp_err_t init_iotDeviceId()
     return ESP_OK;
 }
 
-esp_err_t nvs_read_spi_flash_size(char *flashSize)
-{
-    esp_err_t ret;
-    
-    // read spi flash size from nvs flash storage
-    ret = nvs_read_str_value(CONFIG_ESPTOOLPY_FLASHSIZE, flashSize);
-    if (ret != ESP_OK)
-    {
-        ESP_LOGE(TAG, "Error reading SPI flash size from config.");
-    }
-
-    return ESP_OK;
-}
-
 void incrementMsgReceived()
 {
     deviceStatus.azureMsgReceived++;
@@ -474,7 +497,7 @@ void reboot_task(void *pvParameter)
     ESP_LOGW(TAG, "Rebooting chip in %d seconds.", reboot->rebootDelay);        
 
     // trigger watchdog reset
-    esp_task_wdt_init(reboot->rebootDelay,true);
+    task_wdt_set_timeout(reboot->rebootDelay);
     esp_task_wdt_add(NULL);
     while(true);
     

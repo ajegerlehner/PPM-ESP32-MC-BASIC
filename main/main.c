@@ -21,7 +21,7 @@
 #include "lwip/err.h"
 #include "lwip/sys.h"
 #include "sdkconfig.h"
-#include "tcpip_adapter.h"
+#include "esp_netif.h"
 
 #include "mc_common.h"
 #include "mc_data.h"
@@ -62,7 +62,7 @@ QueueHandle_t telemetryQueue;
 SemaphoreHandle_t startUpMutex;
 SemaphoreHandle_t oledDisplayMutex;
 
-IOTHUB_DEVICE_CLIENT_LL_HANDLE azure_client;
+mc_iothub_handle_t azure_client;
 
 uint8_t currentOLEDScreen;
 
@@ -211,7 +211,7 @@ void azure_task(void *pvParameter)
     
     // setup watchdog timer
     ESP_LOGI(TAG, "WDT initialized with %d seconds.", deviceConfig.watchdogTimeFence);
-    esp_task_wdt_init(deviceConfig.watchdogTimeFence, true);
+    task_wdt_set_timeout(deviceConfig.watchdogTimeFence);
     esp_task_wdt_add(NULL);
     io_expander_set_pin(SIGNAL_PIN_WDE, 1);
 
@@ -421,13 +421,6 @@ void app_main()
         ESP_LOGE(TAG, "APP INFO: No Azure IoT Hub Handle was obtained");                
     }
 
-    // todo set network time
-
-    // setup Azure Iot event hub device twin
-    setupDeviceTwin(azure_client);
-
-    // setup device callback methods
-    setupDeviceCallbackMethods(azure_client);
 
     // set initial time type from last telemetry message.
     setStartupTimeType(&deviceConfig);

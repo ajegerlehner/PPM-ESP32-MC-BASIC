@@ -37,7 +37,7 @@ int mcp23008d_init()
 	i2c_master_write_byte(cmd, MCP23008_IODIRA_REG, ACK_CHECK_EN);					// IODIRA
 	i2c_master_write_byte(cmd, MCP23008_IODIRA_CLEAR, ACK_CHECK_EN);				//Set all as outputs on A
 	i2c_master_stop(cmd);
-	ret = i2c_master_cmd_begin(I2C_MASTER_NUM, cmd, 1000 / portTICK_RATE_MS);
+	ret = i2c_master_cmd_begin(I2C_MASTER_NUM, cmd, 1000 / portTICK_PERIOD_MS);
 	i2c_cmd_link_delete(cmd);
 
 	if (ret == ESP_FAIL) 
@@ -56,7 +56,7 @@ int mcp23008d_init()
 	i2c_master_write_byte(cmd, MCP23008_OLAT_REG, ACK_CHECK_EN);
 	i2c_master_write_byte(cmd, MCP23008_OLAT_CLEAR, ACK_CHECK_EN);					// Clear OLAT register
 	i2c_master_stop(cmd);
-	ret = i2c_master_cmd_begin(I2C_MASTER_NUM, cmd, 1000 / portTICK_RATE_MS);
+	ret = i2c_master_cmd_begin(I2C_MASTER_NUM, cmd, 1000 / portTICK_PERIOD_MS);
 	i2c_cmd_link_delete(cmd);
 
 	if (ret == ESP_FAIL) 
@@ -89,7 +89,7 @@ int mcp23008b_init()
 	i2c_master_write_byte(cmd, MCP23008_IODIRA_REG, ACK_CHECK_EN);						// IODIRA
 	i2c_master_write_byte(cmd, MCP23008_IODIRA_CLEAR, ACK_CHECK_EN);					//Set all as outputs on A
 	i2c_master_stop(cmd);
-	ret = i2c_master_cmd_begin(I2C_MASTER_NUM, cmd, 1000 / portTICK_RATE_MS);
+	ret = i2c_master_cmd_begin(I2C_MASTER_NUM, cmd, 1000 / portTICK_PERIOD_MS);
 	i2c_cmd_link_delete(cmd);
 
 	if (ret == ESP_FAIL) 
@@ -108,7 +108,7 @@ int mcp23008b_init()
 	i2c_master_write_byte(cmd, MCP23008_OLAT_REG, ACK_CHECK_EN);
 	i2c_master_write_byte(cmd, MCP23008_OLAT_CLEAR, ACK_CHECK_EN);						// Clear OLAT register
 	i2c_master_stop(cmd);
-	ret = i2c_master_cmd_begin(I2C_MASTER_NUM, cmd, 1000 / portTICK_RATE_MS);
+	ret = i2c_master_cmd_begin(I2C_MASTER_NUM, cmd, 1000 / portTICK_PERIOD_MS);
 	i2c_cmd_link_delete(cmd);
 
 	if (ret == ESP_FAIL) 
@@ -151,7 +151,7 @@ void mcp23008d_set_pin(int _pin, int _pinValue)
 	i2c_master_write_byte(cmd, MCP23008_OLAT_REG, ACK_CHECK_EN);
 	i2c_master_write_byte(cmd, mcp23008d_olat_register, ACK_CHECK_EN);								// Clear OLAT register
 	i2c_master_stop(cmd);
-	ret = i2c_master_cmd_begin(I2C_MASTER_NUM, cmd, 1000 / portTICK_RATE_MS);
+	ret = i2c_master_cmd_begin(I2C_MASTER_NUM, cmd, 1000 / portTICK_PERIOD_MS);
 	i2c_cmd_link_delete(cmd);
 
 	if (ret == ESP_FAIL)
@@ -183,7 +183,7 @@ void mcp23008b_set_pin(int _pin, int _pinValue)
 	i2c_master_write_byte(cmd, MCP23008_OLAT_REG, ACK_CHECK_EN);
 	i2c_master_write_byte(cmd, mcp23008b_olat_register, ACK_CHECK_EN);								// Clear OLAT register
 	i2c_master_stop(cmd);
-	ret = i2c_master_cmd_begin(I2C_MASTER_NUM, cmd, 1000 / portTICK_RATE_MS);
+	ret = i2c_master_cmd_begin(I2C_MASTER_NUM, cmd, 1000 / portTICK_PERIOD_MS);
 	i2c_cmd_link_delete(cmd);
 
 	if (ret == ESP_FAIL)

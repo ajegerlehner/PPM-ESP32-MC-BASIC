@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <inttypes.h>
+#include <time.h>
 #include "parson.h"
 
 #define AZURE_MSG_SIZE_MAX  1000

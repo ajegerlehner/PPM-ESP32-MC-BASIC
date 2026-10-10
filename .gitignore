@@ -1,1 +1,4 @@
 build/
+build-idf55/
+managed_components/
+sdkconfig.old

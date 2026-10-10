@@ -9,6 +9,7 @@
 
 
 #include "driver/gpio.h"
+#include "esp_rom_gpio.h"
 #include "mc_esp32_gpio.h"
 #include "mc_common.h"
 #include "mc_esp32counter.h"
@@ -49,11 +50,11 @@ static void IRAM_ATTR mc_isr_handler(void *args)
 
 void esp32_init_signal_gpio()
 {
-    gpio_pad_select_gpio(ESP32_PLCOUT_PIN);
+    esp_rom_gpio_pad_select_gpio(ESP32_PLCOUT_PIN);
     gpio_set_direction(ESP32_PLCOUT_PIN, GPIO_MODE_OUTPUT);
-    gpio_pad_select_gpio(ESP32_AZURE_PIN);
+    esp_rom_gpio_pad_select_gpio(ESP32_AZURE_PIN);
     gpio_set_direction(ESP32_AZURE_PIN, GPIO_MODE_OUTPUT);
-    gpio_pad_select_gpio(ESP32_WDT_PIN);
+    esp_rom_gpio_pad_select_gpio(ESP32_WDT_PIN);
     gpio_set_direction(ESP32_WDT_PIN, GPIO_MODE_OUTPUT);
 
     ESP_LOGI(TAG, "ESP32 gpio signal pins setup completed.");

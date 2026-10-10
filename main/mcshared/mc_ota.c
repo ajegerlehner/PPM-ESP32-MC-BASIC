@@ -14,7 +14,7 @@
 #include "esp_http_client.h"
 #include "esp_https_ota.h"
 #include "esp_log.h"
-#include "esp_task_wdt.h"
+#include "esp_crt_bundle.h"
 #include "mc_ota.h"
 #include "mc_data.h"
 #include "mc_sensor_data.h"
@@ -25,7 +25,6 @@
 // defined in main.c
 void enqueueStatusMsg(DeviceStatus *statusMsg, SamplingMessage *samplingMsg, char *statusTxt);
 
-extern const uint8_t server_cert_pem_start[] asm("_binary_azure_cer_start");
 extern DeviceStatus deviceStatus;
 extern SamplingMessage samplingMsg;
 extern DeviceConfig deviceConfig;
@@ -44,15 +43,16 @@ void performOTAUpdate(DeviceTwin* devTwin)
     esp_http_client_config_t clientConfig = {
         .url = devTwin->softwareFilePath,
         .event_handler = client_event_handler,
-        .cert_pem = NULL // (char *)server_cert_pem_start
+        .crt_bundle_attach = esp_crt_bundle_attach
+    };
+    esp_https_ota_config_t otaConfig = {
+        .http_config = &clientConfig
     };
 
     ESP_LOGI(TAG, "Stating OTA update from version %s to version %s using image file %s", devTwin->currentSoftwareVersion, devTwin->desiredSoftwareVersion, devTwin->softwareFilePath);
 
-    // reset watch dog timer so it does not reboot the chip through watch dog timeout
-    esp_task_wdt_reset();
     
-    ret = esp_https_ota(&clientConfig); 
+    ret = esp_https_ota(&otaConfig); 
     if ( ret == ESP_OK)
     {
         // ota update succeeded
@@ -66,9 +66,6 @@ void performOTAUpdate(DeviceTwin* devTwin)
         // reboot chip
         reboot.rebootDelay = 2 * deviceConfig.deviceToCloudInterval;
         spawn_reboot_task(&reboot);
-
-        // reset watch dog timer so it does not reboot the chip through watch dog timeout
-        esp_task_wdt_reset();
 
         return;
     }

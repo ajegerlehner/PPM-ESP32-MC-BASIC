@@ -48,7 +48,7 @@ int mcp23017d_init()
 	i2c_master_write_byte(cmd, MCP23017_IODIRA_REG, ACK_CHECK_EN);				// IODIRA
 	i2c_master_write_byte(cmd, MCP23017_IODIRA_INIT, ACK_CHECK_EN);				//Set all ports directions
 	i2c_master_stop(cmd);
-	ret = i2c_master_cmd_begin(I2C_MASTER_NUM, cmd, 1000 / portTICK_RATE_MS);
+	ret = i2c_master_cmd_begin(I2C_MASTER_NUM, cmd, 1000 / portTICK_PERIOD_MS);
 	i2c_cmd_link_delete(cmd);
 
 	if (ret == ESP_FAIL) 
@@ -66,7 +66,7 @@ int mcp23017d_init()
 	i2c_master_write_byte(cmd, MCP23017_IODIRB_REG, ACK_CHECK_EN);				// IODIRB
 	i2c_master_write_byte(cmd, MCP23017_IODIRB_INIT, ACK_CHECK_EN);				//Set first three ports to input
 	i2c_master_stop(cmd);
-	ret = i2c_master_cmd_begin(I2C_MASTER_NUM, cmd, 1000 / portTICK_RATE_MS);
+	ret = i2c_master_cmd_begin(I2C_MASTER_NUM, cmd, 1000 / portTICK_PERIOD_MS);
 	i2c_cmd_link_delete(cmd);
 
 	if (ret == ESP_FAIL) 
@@ -86,7 +86,7 @@ int mcp23017d_init()
 	i2c_master_write_byte(cmd, MCP23017_OLATA_REG, ACK_CHECK_EN);
 	i2c_master_write_byte(cmd, MCP23017_OLAT_CLEAR, ACK_CHECK_EN);					// Clear OLAT register
 	i2c_master_stop(cmd);
-	ret = i2c_master_cmd_begin(I2C_MASTER_NUM, cmd, 1000 / portTICK_RATE_MS);
+	ret = i2c_master_cmd_begin(I2C_MASTER_NUM, cmd, 1000 / portTICK_PERIOD_MS);
 	i2c_cmd_link_delete(cmd);
 
 	if (ret == ESP_FAIL) 
@@ -103,7 +103,7 @@ int mcp23017d_init()
 	i2c_master_write_byte(cmd, MCP23017_OLATB_REG, ACK_CHECK_EN);
 	i2c_master_write_byte(cmd, MCP23017_OLAT_CLEAR, ACK_CHECK_EN);					// Clear OLAT register
 	i2c_master_stop(cmd);
-	ret = i2c_master_cmd_begin(I2C_MASTER_NUM, cmd, 1000 / portTICK_RATE_MS);
+	ret = i2c_master_cmd_begin(I2C_MASTER_NUM, cmd, 1000 / portTICK_PERIOD_MS);
 	i2c_cmd_link_delete(cmd);
 
 	if (ret == ESP_FAIL) 
@@ -123,7 +123,7 @@ int mcp23017d_init()
 	i2c_master_write_byte(cmd, MCP23017_GPINTENB_REG, ACK_CHECK_EN);
 	i2c_master_write_byte(cmd, MCP23017_GPINTENB_VAL, ACK_CHECK_EN);
 	i2c_master_stop(cmd);
-	ret = i2c_master_cmd_begin(I2C_MASTER_NUM, cmd, 1000 / portTICK_RATE_MS);
+	ret = i2c_master_cmd_begin(I2C_MASTER_NUM, cmd, 1000 / portTICK_PERIOD_MS);
 	i2c_cmd_link_delete(cmd);
 
 	if (ret == ESP_FAIL) 
@@ -140,7 +140,7 @@ int mcp23017d_init()
 	i2c_master_write_byte(cmd, MCP23017_DEFVALB_REG, ACK_CHECK_EN);
 	i2c_master_write_byte(cmd, MCP23017_DEFVALB_VAL, ACK_CHECK_EN);
 	i2c_master_stop(cmd);
-	ret = i2c_master_cmd_begin(I2C_MASTER_NUM, cmd, 1000 / portTICK_RATE_MS);
+	ret = i2c_master_cmd_begin(I2C_MASTER_NUM, cmd, 1000 / portTICK_PERIOD_MS);
 	i2c_cmd_link_delete(cmd);
 
 	if (ret == ESP_FAIL) 
@@ -157,7 +157,7 @@ int mcp23017d_init()
 	i2c_master_write_byte(cmd, MCP23017_INTCONB_REG, ACK_CHECK_EN);
 	i2c_master_write_byte(cmd, MCP23017_INTCONB_VAL, ACK_CHECK_EN);
 	i2c_master_stop(cmd);
-	ret = i2c_master_cmd_begin(I2C_MASTER_NUM, cmd, 1000 / portTICK_RATE_MS);
+	ret = i2c_master_cmd_begin(I2C_MASTER_NUM, cmd, 1000 / portTICK_PERIOD_MS);
 	i2c_cmd_link_delete(cmd);
 
 	if (ret == ESP_FAIL) 
@@ -201,7 +201,7 @@ void mcp23017d_set_pin(int _pin, int _pinValue)
 	i2c_master_write_byte(cmd, MCP23017_OLATA_REG, ACK_CHECK_EN);
 	i2c_master_write_byte(cmd, mcp23017d_olata_register, ACK_CHECK_EN);								
 	i2c_master_stop(cmd);
-	ret = i2c_master_cmd_begin(I2C_MASTER_NUM, cmd, 1000 / portTICK_RATE_MS);
+	ret = i2c_master_cmd_begin(I2C_MASTER_NUM, cmd, 1000 / portTICK_PERIOD_MS);
 	i2c_cmd_link_delete(cmd);
 
 	if (ret == ESP_FAIL)
@@ -247,7 +247,7 @@ bool mcp23017_pin_changed(uint8_t *pin)
 	i2c_master_write_byte(cmd, MCP23017D_ADDR << 1 | WRITE_BIT, ACK_CHECK_EN);
 	i2c_master_write_byte(cmd, MCP23017_INTCAPB_REG, ACK_CHECK_EN);
 	i2c_master_stop(cmd);
-	ret = i2c_master_cmd_begin(I2C_MASTER_NUM, cmd, 1000 / portTICK_RATE_MS);
+	ret = i2c_master_cmd_begin(I2C_MASTER_NUM, cmd, 1000 / portTICK_PERIOD_MS);
 	i2c_cmd_link_delete(cmd);
 
 	// get interrupt capture register value
@@ -256,7 +256,7 @@ bool mcp23017_pin_changed(uint8_t *pin)
 	i2c_master_write_byte(cmd, MCP23017D_ADDR << 1 | READ_BIT, ACK_CHECK_EN);
 	i2c_master_read_byte(cmd, &capValue, 0x01);
 	i2c_master_stop(cmd);
-	ret = i2c_master_cmd_begin(I2C_MASTER_NUM, cmd, 1000 / portTICK_RATE_MS);
+	ret = i2c_master_cmd_begin(I2C_MASTER_NUM, cmd, 1000 / portTICK_PERIOD_MS);
 	i2c_cmd_link_delete(cmd);
 
 	if (ret == ESP_FAIL)
@@ -270,7 +270,7 @@ bool mcp23017_pin_changed(uint8_t *pin)
 	i2c_master_write_byte(cmd, MCP23017D_ADDR << 1 | WRITE_BIT, ACK_CHECK_EN);
 	i2c_master_write_byte(cmd, MCP23017_INTFB_REG, ACK_CHECK_EN);
 	i2c_master_stop(cmd);
-	ret = i2c_master_cmd_begin(I2C_MASTER_NUM, cmd, 1000 / portTICK_RATE_MS);
+	ret = i2c_master_cmd_begin(I2C_MASTER_NUM, cmd, 1000 / portTICK_PERIOD_MS);
 	i2c_cmd_link_delete(cmd);
 
 	if (ret == ESP_FAIL)
@@ -284,7 +284,7 @@ bool mcp23017_pin_changed(uint8_t *pin)
 	i2c_master_write_byte(cmd, MCP23017D_ADDR << 1 | READ_BIT, ACK_CHECK_EN);
 	i2c_master_read_byte(cmd, &regValue, 0x00);
 	i2c_master_stop(cmd);
-	ret = i2c_master_cmd_begin(I2C_MASTER_NUM, cmd, 1000 / portTICK_RATE_MS);
+	ret = i2c_master_cmd_begin(I2C_MASTER_NUM, cmd, 1000 / portTICK_PERIOD_MS);
 	i2c_cmd_link_delete(cmd);
 
 	if (ret == ESP_FAIL)

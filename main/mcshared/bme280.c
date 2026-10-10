@@ -59,7 +59,7 @@ esp_err_t iot_bme280_write_byte(bme280_handle_t dev, uint8_t addr, uint8_t data)
     i2c_master_write_byte(cmd, addr, ACK_CHECK_EN);
     i2c_master_write_byte(cmd, data, ACK_CHECK_EN);
     i2c_master_stop(cmd);
-    ret = iot_i2c_bus_cmd_begin(device->bus, cmd, 1000 / portTICK_RATE_MS);
+    ret = iot_i2c_bus_cmd_begin(device->bus, cmd, 1000 / portTICK_PERIOD_MS);
     i2c_cmd_link_delete(cmd);
     return ret;
 }
@@ -84,7 +84,7 @@ esp_err_t iot_bme280_write(bme280_handle_t dev, uint8_t start_addr,
             }
             i2c_master_stop(cmd);
             ret = iot_i2c_bus_cmd_begin(device->bus, cmd,
-                    1000 / portTICK_RATE_MS);
+                    1000 / portTICK_PERIOD_MS);
             i2c_cmd_link_delete(cmd);
 
             writeNum -= 8;              //write num count
@@ -112,7 +112,7 @@ esp_err_t iot_bme280_read_byte(bme280_handle_t dev, uint8_t addr, uint8_t *data)
     ACK_CHECK_EN);
     i2c_master_read_byte(cmd, data, NACK_VAL);
     i2c_master_stop(cmd);
-    ret = iot_i2c_bus_cmd_begin(device->bus, cmd, 1000 / portTICK_RATE_MS);
+    ret = iot_i2c_bus_cmd_begin(device->bus, cmd, 1000 / portTICK_PERIOD_MS);
     i2c_cmd_link_delete(cmd);
     return ret;
 }
@@ -138,7 +138,7 @@ esp_err_t iot_bme280_read(bme280_handle_t dev, uint8_t start_addr,
         }
         i2c_master_read_byte(cmd, &data_buf[i], NACK_VAL);
         i2c_master_stop(cmd);
-        ret = iot_i2c_bus_cmd_begin(device->bus, cmd, 1000 / portTICK_RATE_MS);
+        ret = iot_i2c_bus_cmd_begin(device->bus, cmd, 1000 / portTICK_PERIOD_MS);
         i2c_cmd_link_delete(cmd);
     }
     return ret;
@@ -359,11 +359,11 @@ esp_err_t iot_bme280_init(bme280_handle_t dev)
     }
 
     // wait for chip to wake up.
-    vTaskDelay(300 / portTICK_RATE_MS);
+    vTaskDelay(300 / portTICK_PERIOD_MS);
 
     // if chip is still reading calibration, delay
     while (iot_bme280_is_reading_calibration(dev)) {
-        vTaskDelay(100 / portTICK_RATE_MS);
+        vTaskDelay(100 / portTICK_PERIOD_MS);
     }
 
     if (iot_bme280_read_coefficients(dev) == ESP_FAIL) { // read trimming parameters, see DS 4.2.2
@@ -395,7 +395,7 @@ esp_err_t iot_bme280_take_forced_measurement(bme280_handle_t dev)
         }
         while (data & 0x08) {
             iot_bme280_read_byte(dev, BME280_REGISTER_STATUS, &data);
-            vTaskDelay(10 / portTICK_RATE_MS);
+            vTaskDelay(10 / portTICK_PERIOD_MS);
         }
     }
     return ESP_OK;

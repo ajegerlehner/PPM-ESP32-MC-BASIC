@@ -1,0 +1,4 @@
+[submodule "components/azure-sdk-for-c/azure-sdk-for-c"]
+	path = components/azure-sdk-for-c/azure-sdk-for-c
+	url = https://github.com/Azure/azure-sdk-for-c.git
+	branch = main

@@ -8,6 +8,7 @@
 
 #include <stdio.h>
 #include "driver/gpio.h"
+#include "esp_rom_gpio.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_log.h"
@@ -17,7 +18,7 @@
 void gpio_init()
 {
     // setup NVS RESET input pin
-    gpio_pad_select_gpio(NVS_RESET_PIN);
+    esp_rom_gpio_pad_select_gpio(NVS_RESET_PIN);
     gpio_set_direction(NVS_RESET_PIN, GPIO_MODE_INPUT);
 
 }

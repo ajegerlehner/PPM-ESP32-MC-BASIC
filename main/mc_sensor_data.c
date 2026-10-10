@@ -11,7 +11,9 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_system.h"
-#include "esp_ota_ops.h"
+#include "esp_app_desc.h"
+#include "esp_mac.h"
+#include "esp_timer.h"
 #include "mc_sensor_data.h"
 #include "mc_data.h"
 #include "mc_mcp23008.h"
@@ -136,7 +138,7 @@ void create_status_msg(DeviceStatus *status, SamplingMessage *samplingMsg, char 
 
 
     // get current app version from ota app description
-    ota_app_desc = esp_ota_get_app_description();
+    ota_app_desc = esp_app_get_description();
 
     time(&now);
     nvs_read_uint32_value("lastOTAUpdate", &otaTime);
@@ -252,22 +254,22 @@ void read_sensor_data(SamplingMessage *msg, DeviceConfig devConfig)
 void read_bme280_data(SamplingMessage *msg)
 {
     msg->temperature = iot_bme280_read_temperature(dev);
-    vTaskDelay(BME280_DELAY / portTICK_RATE_MS);
+    vTaskDelay(BME280_DELAY / portTICK_PERIOD_MS);
 
     msg->humidity = iot_bme280_read_humidity(dev);
-    vTaskDelay(BME280_DELAY / portTICK_RATE_MS);
+    vTaskDelay(BME280_DELAY / portTICK_PERIOD_MS);
 
     msg->pressure = iot_bme280_read_pressure(dev);
-    vTaskDelay(BME280_DELAY / portTICK_RATE_MS);
+    vTaskDelay(BME280_DELAY / portTICK_PERIOD_MS);
 
     msg->altitude = iot_bme280_read_altitude(dev, BME280_SEALEVEL_PRESSURE);
-    vTaskDelay(BME280_DELAY / portTICK_RATE_MS);
+    vTaskDelay(BME280_DELAY / portTICK_PERIOD_MS);
 }
 
 void read_si7021_data(SamplingMessage *msg)
 {
     msg->humidity = si7021_read_humidity();
-    vTaskDelay(SI7021_DELAY / portTICK_RATE_MS);
+    vTaskDelay(SI7021_DELAY / portTICK_PERIOD_MS);
 
     msg->temperature = si7021_read_temperature();
 

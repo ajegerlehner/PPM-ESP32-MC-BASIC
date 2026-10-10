@@ -1,12 +1,29 @@
+/**
+ * Name:            mc_azure_hub_client.c
+ * Description:     Azure IoT Hub device client. Uses the Azure SDK for Embedded C
+ *                  for topics / SAS tokens and the ESP-IDF MQTT client as transport.
+ * Author:          Andreas Jegerlehner
+ * Copyright:       (c) Print & Packaging GmbH. All rights reserved.
+**/
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
+#include <ctype.h>
+#include <time.h>
 #include <inttypes.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include "mc_azure_hub_client.h"
 #include "sdkconfig.h"
 #include "esp_log.h"
-#include "esp_ota_ops.h"
+#include "esp_app_desc.h"
+#include "esp_crt_bundle.h"
+#include "mqtt_client.h"
+#include "mbedtls/base64.h"
+#include "mbedtls/md.h"
+#include "azure/az_core.h"
+#include "azure/az_iot.h"
+#include "parson.h"
+#include "mc_azure_hub_client.h"
 #include "mc_common.h"
 #include "mc_iotcentral.h"
 #include "mc_device.h"
@@ -14,14 +31,69 @@
 #include "mc_sensor_data.h"
 #include "mc_data.h"
 
-#ifdef CONFIG_PPM_IOT_MQTT
-    #include "iothubtransportmqtt.h"
-#endif // MQTT
-#ifdef CONFIG_PPM_IOT_MQTT_WEBSOCKETS
-    #include "iothubtransportmqtt_websockets.h"
-#endif // MQTT_OVER_WEBSOCKETS
-
 #define TAG "AUZURE_IOT"
+
+#define SAS_TOKEN_LIFETIME_SEC          3600
+#define SAS_TOKEN_REFRESH_MARGIN_SEC    600
+#define SAS_KEY_MAX_LEN                 64
+#define MQTT_KEEPALIVE_SEC              240
+#define MQTT_BUFFER_SIZE                2048
+#define MQTT_OUTBOX_LIMIT               (64 * 1024)     // max bytes queued while offline
+#define MQTT_TASK_STACK_SIZE            (1024 * 8)
+#define MQTT_TOPIC_MAX_LEN              192
+#define OTA_TASK_STACK_SIZE             (1024 * 8)
+#define MAX_METHOD_NAME_LEN             20              // same as MAX_C2D_LEN in mc_sensor_data.c
+#define METHOD_STATUS_OK                200
+#define METHOD_STATUS_NOT_FOUND         404
+#define METHOD_STATUS_ERROR             500
+
+#ifdef CONFIG_PPM_IOT_MQTT_WEBSOCKETS
+    #define IOTHUB_MQTT_TRANSPORT       MQTT_TRANSPORT_OVER_WSS
+    #define IOTHUB_MQTT_PORT            443
+    #define IOTHUB_MQTT_PATH            "/$iothub/websocket"
+#else
+    #define IOTHUB_MQTT_TRANSPORT       MQTT_TRANSPORT_OVER_SSL
+    #define IOTHUB_MQTT_PORT            8883
+    #define IOTHUB_MQTT_PATH            NULL
+#endif
+
+struct mc_iothub_client
+{
+    az_iot_hub_client hub;
+    esp_mqtt_client_handle_t mqtt;
+    char *hostName;
+    char *deviceId;
+    uint8_t sasKey[SAS_KEY_MAX_LEN];
+    size_t sasKeyLen;
+    char userName[256];
+    char sasToken[320];
+    time_t sasTokenExpiry;
+    char telemetryTopic[MQTT_TOPIC_MAX_LEN];
+    volatile bool connected;
+    volatile bool authRejected;
+    uint32_t requestId;
+    char *rxTopic;      // incoming message being reassembled
+    char *rxData;
+};
+
+typedef struct
+{
+    const char *method;
+    TimeType timeType;
+    const char *label;
+    const char *statusMsg;
+    const char *response;
+} TimeTypeMethod;
+
+// direct methods to force a time type (new operation on sfdc terminal)
+static const TimeTypeMethod timeTypeMethods[] = {
+    { "SETUP",      Setuptime,    "Setuptime",         "Cloud to device: SETUP.",      "{ \"Response\": \"New setup operation triggered.\" }" },
+    { "RUNTIME",    Runtime,      "Runtime",           "Cloud to device: RUNTIME.",    "{ \"Response\": \"New runtime operation id triggered.\" }" },
+    { "DOWNTIME",   Downtime,     "Downtime",          "Cloud to device: DOWNTIME.",   "{ \"Response\": \"New downtime operation id triggered.\" }" },
+    { "PAUSE",      Pause,        "Pause",             "Cloud to device: PAUSE.",      "{ \"Response\": \"New pause operation id triggered.\" }" },
+    { "AUXTIME",    Auxiliary,    "Auxiliary time",    "Cloud to device: AUXTIME.",    "{ \"Response\": \"New auxiliary time triggered.\" }" },
+    { "UNPRODTIME", Unproductive, "Unproductive time", "Cloud to device: UNPRODTIME.", "{ \"Response\": \"New unproductive time triggered.\" }" },
+};
 
 extern SamplingMessage samplingMsg;
 extern DeviceStatus deviceStatus;
@@ -29,117 +101,95 @@ void enqueueStatusMsg(DeviceStatus *statusMsg, SamplingMessage *samplingMsg, cha
 
 DeviceTwin currentDeviceTwin;
 
-IOTHUB_DEVICE_CLIENT_LL_HANDLE init_iothub_client(char *deviceId)
+static char currentSoftwareVersion[sizeof(((esp_app_desc_t *)0)->version)];
+static RebootStruct reboot;
+static volatile bool otaInProgress;
+
+// returns a copy of the value of "<key>=" in a ';' separated connection string
+static char *connection_string_value(const char *connectionString, const char *key)
 {
-    DeviceConfig devConfig;
-    IOTHUB_CLIENT_TRANSPORT_PROVIDER protocol;
+    size_t keyLen = strlen(key);
+    const char *pos = connectionString;
 
-#ifdef CONFIG_PPM_IOT_MQTT
-        protocol = MQTT_Protocol;
-#endif // Use MQTT protocol
-#ifdef CONFIG_PPM_IOT_MQTT_WEBSOCKETS
-        protocol = MQTT_WebSocket_Protocol;
-#endif // Use MQTT_OVER_WEBSOCKETS protocol
-
-    // Initializing Iot Hub SDK
-    int iotHubInitResult = IoTHub_Init();
-    if (iotHubInitResult != 0)
+    while (pos != NULL)
     {
-        ESP_LOGE(TAG,"AZURE INFO: Error initializing Azure IoT Client");
-        return NULL;
+        if (strncmp(pos, key, keyLen) == 0 && pos[keyLen] == '=')
+        {
+            const char *value = pos + keyLen + 1;
+            const char *end = strchr(value, ';');
+
+            return strndup(value, end != NULL ? (size_t)(end - value) : strlen(value));
+        }
+
+        pos = strchr(pos, ';');
+        if (pos != NULL)
+        {
+            pos++;
+        }
     }
 
-    // get the device config from ppm iot central and provide connection string etc. 
-    get_device_config(deviceId);
-    ESP_LOGI(TAG, "IoT Central device config loaded for device %s", deviceId);
-    
-    // get device configuration struct for connection string
-    devConfig = get_device_config_data();
-    ESP_LOGI(TAG, "Device connection string is: %s", devConfig.deviceConnectionString);
-    
-    // Creating IoT Hub Client Handle from Connection String
-    IOTHUB_DEVICE_CLIENT_LL_HANDLE iothub_deviceclient = 
-                IoTHubDeviceClient_LL_CreateFromConnectionString(devConfig.deviceConnectionString, protocol);
-    
-    // Setting IoT Hub Device Client 
-    // Enable verbose logging (e.g., for debugging).
-    bool traceOn = true;
-    bool encodeOn = true;
-    (void)IoTHubDeviceClient_LL_SetOption(iothub_deviceclient, OPTION_LOG_TRACE, &traceOn);
-    (void)IoTHubDeviceClient_LL_SetOption(iothub_deviceclient, OPTION_AUTO_URL_ENCODE_DECODE, &encodeOn);
-
-    return iothub_deviceclient;
+    return NULL;
 }
 
-int send_azure_msgs(char *msgToSend, IOTHUB_DEVICE_CLIENT_LL_HANDLE iothub_deviceclient)
+static esp_err_t generate_sas_token(struct mc_iothub_client *client)
 {
-    IOTHUB_MESSAGE_HANDLE deviceMsgHandle;
-    int azureSendMsgResult;
+    uint8_t signatureBuffer[256];
+    uint8_t hmac[32];
+    unsigned char hmacBase64[64];
+    size_t hmacBase64Len;
+    az_span signature;
+    time_t expiry = time(NULL) + SAS_TOKEN_LIFETIME_SEC;
 
-    if (iothub_deviceclient == NULL)
+    if (az_result_failed(az_iot_hub_client_sas_get_signature(&client->hub, (uint64_t)expiry, AZ_SPAN_FROM_BUFFER(signatureBuffer), &signature)))
     {
-        printf("ERROR: iothub_deviceclient is NULL!\n");
-        printf("Check IoT Hub Device Connection String in Config\n");
-        ESP_LOGE(TAG, "AZURE INFO: ERROR-IoT Hub Client Handle is NULL");
-        return -1;
+        ESP_LOGE(TAG, "Failed to build SAS signature");
+        return ESP_FAIL;
     }
-    
-    // Creating IoT Hub Message 
-    // NOTE: Two ways to create message, Azure accepts string based input
-    //deviceMsgHandle = IoTHubMessage_CreateFromByteArray((const unsigned char *)msgToSend, sizeof(msgToSend));
-    deviceMsgHandle = IoTHubMessage_CreateFromString(msgToSend);
- 
-    if (deviceMsgHandle == NULL)
-    {
-        printf("ERROR: deviceMsgHandle is NULL! Create Message failed.\n");
-        ESP_LOGE(TAG, "AZURE INFO: ERROR-Failed to Create Azure Message");
-        return -1;
-    }
-    
-    IoTHubMessage_SetContentEncodingSystemProperty(deviceMsgHandle, "utf-8");
-    IoTHubMessage_SetContentTypeSystemProperty(deviceMsgHandle, "application/json");
-    
-    // Sending Message to IoT Hub
-    azureSendMsgResult = IoTHubClient_LL_SendEventAsync(iothub_deviceclient, deviceMsgHandle, NULL, NULL);
 
-    if (azureSendMsgResult != IOTHUB_CLIENT_OK)
+    if (mbedtls_md_hmac(mbedtls_md_info_from_type(MBEDTLS_MD_SHA256), client->sasKey, client->sasKeyLen,
+                        az_span_ptr(signature), (size_t)az_span_size(signature), hmac) != 0 ||
+        mbedtls_base64_encode(hmacBase64, sizeof(hmacBase64), &hmacBase64Len, hmac, sizeof(hmac)) != 0)
     {
-        printf("ERROR: IoTHubClient_LL_SendEventAsync..........FAILED!\n");
-        ESP_LOGE(TAG, "AZURE INFO: ERROR-Failed Azure Send Event");
-        IoTHubMessage_Destroy(deviceMsgHandle);
-        return -1;
+        ESP_LOGE(TAG, "Failed to sign SAS token");
+        return ESP_FAIL;
     }
-    
-    time_t sendTime = time(NULL);
-    printf("SUCCESS: IoTHubClient_LL_SendEventAsync accepted message for transmission to IoT Hub.\n");
-    printf("Message sent at %s\n", asctime(gmtime(&sendTime)));
-    ESP_LOGI(TAG, "AZURE INFO: Completed Message successfully accepted to Azure transmission");
-    
-    IoTHubMessage_Destroy(deviceMsgHandle);
 
-    return 0;
+    if (az_result_failed(az_iot_hub_client_sas_get_password(&client->hub, (uint64_t)expiry, az_span_create(hmacBase64, (int32_t)hmacBase64Len),
+                                                            AZ_SPAN_EMPTY, client->sasToken, sizeof(client->sasToken), NULL)))
+    {
+        ESP_LOGE(TAG, "Failed to build SAS token");
+        return ESP_FAIL;
+    }
+
+    client->sasTokenExpiry = expiry;
+
+    return ESP_OK;
 }
 
-void process_azure_msgs(IOTHUB_DEVICE_CLIENT_LL_HANDLE iothub_deviceclient)
+static void fill_mqtt_config(struct mc_iothub_client *client, esp_mqtt_client_config_t *mqttConfig)
 {
-    IOTHUB_CLIENT_STATUS status;
+    memset(mqttConfig, 0, sizeof(*mqttConfig));
 
-    ESP_LOGI(TAG, "AZURE INFO: Start Processing Azure Messages");
-    printf("Do Work: Processing IoT Hub Send Message Requests %X\n", (int)iothub_deviceclient);
-    while ((IoTHubClient_LL_GetSendStatus(iothub_deviceclient, &status) == IOTHUB_CLIENT_OK) 
-                && (status == IOTHUB_CLIENT_SEND_STATUS_BUSY))
-    {
-        IoTHubClient_LL_DoWork(iothub_deviceclient);
-    }
-    
-    ESP_LOGI(TAG, "AZURE INFO: Stop Processing Azure Messages");
+    mqttConfig->broker.address.hostname = client->hostName;
+    mqttConfig->broker.address.transport = IOTHUB_MQTT_TRANSPORT;
+    mqttConfig->broker.address.port = IOTHUB_MQTT_PORT;
+    mqttConfig->broker.address.path = IOTHUB_MQTT_PATH;
+    mqttConfig->broker.verification.crt_bundle_attach = esp_crt_bundle_attach;
+    mqttConfig->credentials.client_id = client->deviceId;
+    mqttConfig->credentials.username = client->userName;
+    mqttConfig->credentials.authentication.password = client->sasToken;
+    mqttConfig->session.keepalive = MQTT_KEEPALIVE_SEC;
+    mqttConfig->buffer.size = MQTT_BUFFER_SIZE;
+    mqttConfig->task.stack_size = MQTT_TASK_STACK_SIZE;
+    mqttConfig->outbox.limit = MQTT_OUTBOX_LIMIT;
 }
 
-void destroy_iothub_client(IOTHUB_DEVICE_CLIENT_LL_HANDLE iothub_deviceclient)
+static void free_device_twin(DeviceTwin *twin)
 {
-    ESP_LOGI(TAG, "AZURE INFO: Cleaning up - Removing Device Client");
-    IoTHubClient_LL_Destroy(iothub_deviceclient);
-    IoTHub_Deinit();
+    free(twin->currentSoftwareVersion);
+    free(twin->desiredSoftwareVersion);
+    free(twin->softwareFilePath);
+    free(twin);
 }
 
 char* deviceTwinToJSON(DeviceTwin* twin)
@@ -154,17 +204,17 @@ char* deviceTwinToJSON(DeviceTwin* twin)
     jsonStr = json_serialize_to_string(root_value);
 
     json_value_free(root_value);
-    
+
     return jsonStr;
 }
 
-DeviceTwin* deviceTwinfromJSON(const char* jsonStr, DEVICE_TWIN_UPDATE_STATE updateState)
+DeviceTwin* deviceTwinfromJSON(const char* jsonStr, bool completeTwin)
 {
     DeviceTwin* deviceTwin = malloc(sizeof(DeviceTwin));
     JSON_Value* root_value = NULL;
     JSON_Object* root_object = NULL;
-    JSON_Value* firmwareVersion;
-    JSON_Value* firmwareFilePath;
+    const char* firmwareVersion;
+    const char* firmwareFilePath;
 
     if (deviceTwin == NULL)
     {
@@ -178,74 +228,67 @@ DeviceTwin* deviceTwinfromJSON(const char* jsonStr, DEVICE_TWIN_UPDATE_STATE upd
     root_object = json_value_get_object(root_value);
 
     // get only desired properties
-    if (updateState == DEVICE_TWIN_UPDATE_COMPLETE)
+    if (completeTwin)
     {
-        printf("Device Twin update complete...\n");
-        firmwareVersion = json_object_dotget_value(root_object, "desired.firmware.firmwareVersion");
-        firmwareFilePath = json_object_dotget_value(root_object, "desired.firmware.url");
+        ESP_LOGI(TAG, "Device Twin update complete...");
+        firmwareVersion = json_object_dotget_string(root_object, "desired.firmware.firmwareVersion");
+        firmwareFilePath = json_object_dotget_string(root_object, "desired.firmware.url");
     }
     else
     {
-        printf("Device Twin update partial...\n");
-        firmwareVersion = json_object_dotget_value(root_object, "firmware.firmwareVersion");        
-        firmwareFilePath = json_object_dotget_value(root_object, "firmware.url");
+        ESP_LOGI(TAG, "Device Twin update partial...");
+        firmwareVersion = json_object_dotget_string(root_object, "firmware.firmwareVersion");
+        firmwareFilePath = json_object_dotget_string(root_object, "firmware.url");
     }
 
     if (firmwareVersion != NULL)
     {
-        const char *data = json_value_get_string(firmwareVersion);
-        deviceTwin->desiredSoftwareVersion = malloc(strlen(data)+1);
-        if (deviceTwin->desiredSoftwareVersion != NULL)
-        {
-            strcpy(deviceTwin->desiredSoftwareVersion, data);        
-        }
-        else
+        deviceTwin->desiredSoftwareVersion = strdup(firmwareVersion);
+        if (deviceTwin->desiredSoftwareVersion == NULL)
         {
             ESP_LOGE(TAG, "Failed allocating memory for desired property desiredSoftwareVersion");
-        }        
+        }
     }
     if (firmwareFilePath != NULL)
     {
-        const char *data = json_value_get_string(firmwareFilePath);
-        deviceTwin->softwareFilePath = malloc(strlen(data)+1);
-        if (deviceTwin->softwareFilePath != NULL)
-        {
-            strcpy(deviceTwin->softwareFilePath, data);        
-        }
-        else
+        deviceTwin->softwareFilePath = strdup(firmwareFilePath);
+        if (deviceTwin->softwareFilePath == NULL)
         {
             ESP_LOGE(TAG, "Failed allocating memory for desired property desiredSoftwareFilePath");
-        }        
+        }
     }
 
-    deviceTwin->currentSoftwareVersion = malloc(strlen(currentDeviceTwin.currentSoftwareVersion)+1);
-    if (deviceTwin->currentSoftwareVersion != NULL)
-    {
-        strcpy(deviceTwin->currentSoftwareVersion, currentDeviceTwin.currentSoftwareVersion);
-    }
-    else
+    deviceTwin->currentSoftwareVersion = strdup(currentDeviceTwin.currentSoftwareVersion);
+    if (deviceTwin->currentSoftwareVersion == NULL)
     {
         ESP_LOGE(TAG, "Failed allocating memory for desired property currentSoftwareVersion");
     }
-    
 
     json_value_free(root_value);
 
-    return deviceTwin;    
+    return deviceTwin;
 }
 
-void deviceTwinCallback(DEVICE_TWIN_UPDATE_STATE updateState, const unsigned char* payload, size_t size, void* userContextCallback)
+// OTA download runs in its own task so the MQTT connection is kept alive meanwhile
+static void ota_task(void *pvParameter)
 {
-    //(void)userContextCallback;
-    DeviceTwin* newTwin = deviceTwinfromJSON((const char*) payload, updateState);
+    DeviceTwin *newTwin = (DeviceTwin *)pvParameter;
 
-    if (newTwin->desiredSoftwareVersion == NULL)
-    {
-        ESP_LOGE(TAG, "Failed to parse new twin JSON desired firmwareVersion. Skipping update.");
-        return;
-    }
+    // perform OTA update from Azure blob storage
+    performOTAUpdate(newTwin);
 
-    ESP_LOGI(TAG, "Device Twin callback. New twin firmwareVersion: %s, current firmwareVersion is %s",  newTwin->desiredSoftwareVersion, currentDeviceTwin.currentSoftwareVersion);
+    // remember the version, so the same desired version does not trigger another update
+    strlcpy(currentSoftwareVersion, newTwin->desiredSoftwareVersion, sizeof(currentSoftwareVersion));
+
+    free_device_twin(newTwin);
+    otaInProgress = false;
+
+    vTaskDelete(NULL);
+}
+
+static void deviceTwinCallback(bool completeTwin, const char *payload)
+{
+    DeviceTwin* newTwin = deviceTwinfromJSON(payload, completeTwin);
 
     if (newTwin == NULL)
     {
@@ -253,270 +296,468 @@ void deviceTwinCallback(DEVICE_TWIN_UPDATE_STATE updateState, const unsigned cha
         return;
     }
 
-    if (newTwin->desiredSoftwareVersion != NULL)
+    if (newTwin->desiredSoftwareVersion == NULL || newTwin->currentSoftwareVersion == NULL)
     {
-        if (strcmp(currentDeviceTwin.currentSoftwareVersion, newTwin->desiredSoftwareVersion) != 0)
+        ESP_LOGE(TAG, "Failed to parse new twin JSON desired firmwareVersion. Skipping update.");
+        free_device_twin(newTwin);
+        return;
+    }
+
+    ESP_LOGI(TAG, "Device Twin callback. New twin firmwareVersion: %s, current firmwareVersion is %s",  newTwin->desiredSoftwareVersion, newTwin->currentSoftwareVersion);
+
+    if (strcmp(newTwin->currentSoftwareVersion, newTwin->desiredSoftwareVersion) != 0)
+    {
+        // new desired firmware version reveived, prepare for OTA update
+        ESP_LOGI(TAG, "Reveiced new firmware version: %s, current version is %s.", newTwin->desiredSoftwareVersion, newTwin->currentSoftwareVersion);
+
+        if (otaInProgress)
         {
-            // new desired firmware version reveived, prepare for OTA update
-            ESP_LOGI(TAG, "Reveiced new firmware version: %s, current version is %s.", newTwin->desiredSoftwareVersion, currentDeviceTwin.currentSoftwareVersion);
-            
-            // perform OTA update from Azure blob storage
-            performOTAUpdate(newTwin);
-
-            free(currentDeviceTwin.currentSoftwareVersion);
-            currentDeviceTwin.currentSoftwareVersion = malloc(strlen(newTwin->desiredSoftwareVersion)+1);
-            strcpy(currentDeviceTwin.currentSoftwareVersion, newTwin->desiredSoftwareVersion);
-        }
-
-        free(newTwin->currentSoftwareVersion);
-        free(newTwin->desiredSoftwareVersion);
-        free(newTwin->softwareFilePath);
-        free(newTwin);
-    }
-}
-
-void reportedStateCallback(int statusCode, void* userContextCallback)
-{
-    (void)userContextCallback;
-    ESP_LOGI(TAG, "DeviceTwin reported properties update completed with status: %d. Reported firmware version: %s", statusCode, currentDeviceTwin.currentSoftwareVersion);
-}
-
-void setupDeviceTwin(IOTHUB_DEVICE_CLIENT_LL_HANDLE iothub_deviceclient)
-{    
-    const esp_app_desc_t *ota_app_desc;
-
-    memset(&currentDeviceTwin, 0, sizeof(currentDeviceTwin));
-
-    // get current app version from ota app description
-    ota_app_desc = esp_ota_get_app_description();
-    ESP_LOGI(TAG, "Setting up Azure Device Twin. App project is %s, App version is %s", ota_app_desc->project_name,  ota_app_desc->version);
-
-    currentDeviceTwin.currentSoftwareVersion = malloc(strlen(ota_app_desc->version)+1);
-    strcpy(currentDeviceTwin.currentSoftwareVersion, ota_app_desc->version); 
-
-    char* reportedProperties = deviceTwinToJSON(&currentDeviceTwin);
-    if (reportedProperties != NULL)
-    {
-        IoTHubDeviceClient_LL_SendReportedState(iothub_deviceclient, (const unsigned char*)reportedProperties, strlen(reportedProperties), reportedStateCallback, NULL);
-        IoTHubDeviceClient_LL_SetDeviceTwinCallback(iothub_deviceclient, deviceTwinCallback, &currentDeviceTwin);
-    }
-
-    free(reportedProperties);
-}
-
-void setupDeviceCallbackMethods(IOTHUB_DEVICE_CLIENT_LL_HANDLE iothub_deviceclient)
-{
-    IOTHUB_CLIENT_RESULT iotHubResult;
-
-    // register device client callback method
-    iotHubResult = IoTHubDeviceClient_LL_SetDeviceMethodCallback(iothub_deviceclient, deviceMethodCallback, NULL);
-    if (iotHubResult == IOTHUB_CLIENT_OK)
-    {
-        ESP_LOGI(TAG, "Registered IotHub device client method callback."); 
-    }
-    else
-    {
-        ESP_LOGE(TAG, "Error when registering the IotHub device client method callback: %d", iotHubResult);
-    }
-    
-}
-
-int deviceMethodCallback(const char* method_name, const unsigned char* payload, size_t size, unsigned char** response, size_t* response_size, void* userContextCallback)
-{
-    (void)userContextCallback;
-    (void)payload;
-    (void)size;
-
-    int result;
-    RebootStruct reboot;
-
-    // log cloud to device messge in device status
-    deviceStatus.azureMsgReceived++;
-    strcpy(deviceStatus.lastCloudToDeviceMsg, method_name);
-
-    if (strcmp("REBOOT", strupr((char*)method_name)) == 0)
-    {
-        enqueueStatusMsg(&deviceStatus, &samplingMsg, "Cloud to device: REBOOT.");
-        const char deviceMethodResponse[] = "{ \"Response\": \"Rebooting chip.\" }";
-        *response_size = sizeof(deviceMethodResponse)-1;
-        *response = malloc(*response_size);
-        (void)memcpy(*response, deviceMethodResponse, *response_size);
-        result = 200;
-        
-        // spawn reboot task
-        reboot.rebootDelay = CONFIG_PPM_IOT_REBOOT_DELAY;
-        spawn_reboot_task(&reboot);
-    }
-    else if (strcmp("NVSCLEAR", strupr((char*)method_name)) == 0)
-    {
-        if (nvs_delete_key(NVS_SSID_TAG) == ESP_OK && 
-            nvs_delete_key(NVS_SSID_PWD_TAG) == ESP_OK &&
-            nvs_delete_key(NVS_NODENAME_TAG) == ESP_OK)
-        {
-            const char deviceMethodResponse[] = "{ \"Response\": \"WiFi keys erased.\" }";
-            *response_size = sizeof(deviceMethodResponse)-1;
-            *response = malloc(*response_size);
-            (void)memcpy(*response, deviceMethodResponse, *response_size);
-            result = 200;
-
-            enqueueStatusMsg(&deviceStatus, &samplingMsg, "Cloud to device: NVSCLEAR.");
-            
-            // spawn reboot task
-            reboot.rebootDelay = 10;
-            spawn_reboot_task(&reboot);
+            ESP_LOGW(TAG, "OTA update already in progress. Skipping update.");
         }
         else
         {
-            const char deviceMethodResponse[] = "{ \"Response\": \"Error erasing WiFi keys.\" }";
-            *response_size = sizeof(deviceMethodResponse)-1;
-            *response = malloc(*response_size);
-            (void)memcpy(*response, deviceMethodResponse, *response_size);
-            result = -1;
-        }        
-    }    
-    else if (strcmp("UPDATE", strupr((char*)method_name)) == 0)
+            otaInProgress = true;
+            if (xTaskCreate(&ota_task, "ota_task", OTA_TASK_STACK_SIZE, newTwin, 5, NULL) == pdPASS)
+            {
+                // ota task owns the twin now
+                return;
+            }
+
+            otaInProgress = false;
+            ESP_LOGE(TAG, "Create OTA task failed");
+        }
+    }
+
+    free_device_twin(newTwin);
+}
+
+// requests the full twin document and reports the running firmware version
+static void sync_device_twin(struct mc_iothub_client *client)
+{
+    char topic[MQTT_TOPIC_MAX_LEN];
+    char requestId[12];
+    char *reportedProperties;
+
+    snprintf(requestId, sizeof(requestId), "%" PRIu32, ++client->requestId);
+    if (az_result_succeeded(az_iot_hub_client_twin_document_get_publish_topic(&client->hub, az_span_create_from_str(requestId), topic, sizeof(topic), NULL)))
+    {
+        esp_mqtt_client_enqueue(client->mqtt, topic, "", 0, 1, 0, true);
+    }
+
+    reportedProperties = deviceTwinToJSON(&currentDeviceTwin);
+    if (reportedProperties != NULL)
+    {
+        snprintf(requestId, sizeof(requestId), "%" PRIu32, ++client->requestId);
+        if (az_result_succeeded(az_iot_hub_client_twin_patch_get_publish_topic(&client->hub, az_span_create_from_str(requestId), topic, sizeof(topic), NULL)))
+        {
+            esp_mqtt_client_enqueue(client->mqtt, topic, reportedProperties, 0, 1, 0, true);
+        }
+
+        json_free_serialized_string(reportedProperties);
+    }
+}
+
+static void handle_twin_response(const az_iot_hub_client_twin_response *response, const char *payload)
+{
+    switch (response->response_type)
+    {
+        case AZ_IOT_HUB_CLIENT_TWIN_RESPONSE_TYPE_GET:
+            if (response->status == AZ_IOT_STATUS_OK)
+            {
+                deviceTwinCallback(true, payload);
+            }
+            else
+            {
+                ESP_LOGE(TAG, "Device Twin request failed with status: %d", response->status);
+            }
+            break;
+
+        case AZ_IOT_HUB_CLIENT_TWIN_RESPONSE_TYPE_DESIRED_PROPERTIES:
+            deviceTwinCallback(false, payload);
+            break;
+
+        case AZ_IOT_HUB_CLIENT_TWIN_RESPONSE_TYPE_REPORTED_PROPERTIES:
+            ESP_LOGI(TAG, "DeviceTwin reported properties update completed with status: %d. Reported firmware version: %s", response->status, currentDeviceTwin.currentSoftwareVersion);
+            break;
+
+        default:
+            ESP_LOGE(TAG, "Device Twin request error, status: %d", response->status);
+            break;
+    }
+}
+
+// handles a direct method, methodName is upper case. Returns the method status code.
+static int deviceMethodCallback(const char *methodName, const char *payload, const char **response)
+{
+    if (strcmp("REBOOT", methodName) == 0)
+    {
+        enqueueStatusMsg(&deviceStatus, &samplingMsg, "Cloud to device: REBOOT.");
+        *response = "{ \"Response\": \"Rebooting chip.\" }";
+
+        // spawn reboot task
+        reboot.rebootDelay = CONFIG_PPM_IOT_REBOOT_DELAY;
+        spawn_reboot_task(&reboot);
+
+        return METHOD_STATUS_OK;
+    }
+
+    if (strcmp("NVSCLEAR", methodName) == 0)
+    {
+        if (nvs_delete_key(NVS_SSID_TAG) == ESP_OK &&
+            nvs_delete_key(NVS_SSID_PWD_TAG) == ESP_OK &&
+            nvs_delete_key(NVS_NODENAME_TAG) == ESP_OK)
+        {
+            *response = "{ \"Response\": \"WiFi keys erased.\" }";
+
+            enqueueStatusMsg(&deviceStatus, &samplingMsg, "Cloud to device: NVSCLEAR.");
+
+            // spawn reboot task
+            reboot.rebootDelay = 10;
+            spawn_reboot_task(&reboot);
+
+            return METHOD_STATUS_OK;
+        }
+
+        *response = "{ \"Response\": \"Error erasing WiFi keys.\" }";
+
+        return METHOD_STATUS_ERROR;
+    }
+
+    if (strcmp("UPDATE", methodName) == 0)
     {
         enqueueStatusMsg(&deviceStatus, &samplingMsg, "Cloud to device: UPDATE.");
-        const char deviceMethodResponse[] = "{ \"Response\": \"Update message triggered.\" }";
-        *response_size = sizeof(deviceMethodResponse)-1;
-        *response = malloc(*response_size);
-        (void)memcpy(*response, deviceMethodResponse, *response_size);
-        result = 200;
-            
-    }    
-    else if (strcmp("STATUS", strupr((char*)method_name)) == 0)
+        *response = "{ \"Response\": \"Update message triggered.\" }";
+
+        return METHOD_STATUS_OK;
+    }
+
+    if (strcmp("STATUS", methodName) == 0)
     {
         enqueueStatusMsg(&deviceStatus, &samplingMsg, "Cloud to device: STATUS.");
-        const char deviceMethodResponse[] = "{ \"Response\": \"Update status message triggered.\" }";
-        *response_size = sizeof(deviceMethodResponse)-1;
-        *response = malloc(*response_size);
-        (void)memcpy(*response, deviceMethodResponse, *response_size);
-        result = 200;
-            
-    }    
-    else if (strcmp("SETUP", strupr((char*)method_name)) == 0) // new operation on sfdc terminal
+        *response = "{ \"Response\": \"Update status message triggered.\" }";
+
+        return METHOD_STATUS_OK;
+    }
+
+    for (size_t i = 0; i < sizeof(timeTypeMethods) / sizeof(timeTypeMethods[0]); i++)
     {
-        setCurrentTimeType(Setuptime);
-        enqueueStatusMsg(&deviceStatus, &samplingMsg, "Cloud to device: SETUP.");
-        ESP_LOGI(TAG, "Setuptime forced set by cloud to device message. Payload: %s", payload); // todo correct string handling
+        if (strcmp(timeTypeMethods[i].method, methodName) == 0)
+        {
+            setCurrentTimeType(timeTypeMethods[i].timeType);
+            enqueueStatusMsg(&deviceStatus, &samplingMsg, (char *)timeTypeMethods[i].statusMsg);
+            ESP_LOGI(TAG, "%s forced set by cloud to device message. Payload: %s", timeTypeMethods[i].label, payload);
+            *response = timeTypeMethods[i].response;
 
-        const char deviceMethodResponse[] = "{ \"Response\": \"New setup operation triggered.\" }";
-        *response_size = sizeof(deviceMethodResponse)-1;
-        *response = malloc(*response_size);
-        (void)memcpy(*response, deviceMethodResponse, *response_size);
-        result = 200;
-    }    
-    else if (strcmp("RUNTIME", strupr((char*)method_name)) == 0) // new operation on sfdc terminal
+            return METHOD_STATUS_OK;
+        }
+    }
+
+    ESP_LOGW(TAG, "Unknown cloud to device message received.");
+    enqueueStatusMsg(&deviceStatus, &samplingMsg, "Cloud to device: UNKNOWN.");
+    // All other entries are ignored.
+    *response = "{ \"Response\": \"Unknown method call.\" }";
+
+    return METHOD_STATUS_NOT_FOUND;
+}
+
+static void handle_method_request(struct mc_iothub_client *client, const az_iot_hub_client_method_request *request, const char *payload)
+{
+    char methodName[MAX_METHOD_NAME_LEN + 1];
+    char topic[MQTT_TOPIC_MAX_LEN];
+    const char *response = NULL;
+    int status;
+
+    // names longer than any known method are reported as unknown
+    snprintf(methodName, sizeof(methodName), "%.*s", (int)az_span_size(request->name), (const char *)az_span_ptr(request->name));
+
+    // log cloud to device messge in device status
+    deviceStatus.azureMsgReceived++;
+    if (deviceStatus.lastCloudToDeviceMsg != NULL)
     {
-        setCurrentTimeType(Runtime);
-        enqueueStatusMsg(&deviceStatus, &samplingMsg, "Cloud to device: RUNTIME.");
-        ESP_LOGI(TAG, "Runtime forced set by cloud to device message. Payload: %s", payload); // todo correct string handling
+        strcpy(deviceStatus.lastCloudToDeviceMsg, methodName);
+    }
 
-        const char deviceMethodResponse[] = "{ \"Response\": \"New runtime operation id triggered.\" }";
-        *response_size = sizeof(deviceMethodResponse)-1;
-        *response = malloc(*response_size);
-        (void)memcpy(*response, deviceMethodResponse, *response_size);
-        result = 200;
-    }    
-    else if (strcmp("DOWNTIME", strupr((char*)method_name)) == 0) // new operation on sfdc terminal
+    if (az_span_size(request->name) > MAX_METHOD_NAME_LEN)
     {
-        setCurrentTimeType(Downtime);
-        enqueueStatusMsg(&deviceStatus, &samplingMsg, "Cloud to device: DOWNTIME.");
-        ESP_LOGI(TAG, "Downtime forced set by cloud to device message. Payload: %s", payload); // todo correct string handling
+        methodName[0] = '\0';
+    }
+    for (char *c = methodName; *c != '\0'; c++)
+    {
+        *c = (char)toupper((unsigned char)*c);
+    }
 
-        const char deviceMethodResponse[] = "{ \"Response\": \"New downtime operation id triggered.\" }";
-        *response_size = sizeof(deviceMethodResponse)-1;
-        *response = malloc(*response_size);
-        (void)memcpy(*response, deviceMethodResponse, *response_size);
-        result = 200;
-    }    
-    else if (strcmp("PAUSE", strupr((char*)method_name)) == 0) // new operation on sfdc terminal
-    {        
-        setCurrentTimeType(Pause);
-        enqueueStatusMsg(&deviceStatus, &samplingMsg, "Cloud to device: PAUSE.");
-        ESP_LOGI(TAG, "Pause forced set by cloud to device message. Payload: %s", payload); // todo correct string handling
+    status = deviceMethodCallback(methodName, payload, &response);
 
-        const char deviceMethodResponse[] = "{ \"Response\": \"New pause operation id triggered.\" }";
-        *response_size = sizeof(deviceMethodResponse)-1;
-        *response = malloc(*response_size);
-        (void)memcpy(*response, deviceMethodResponse, *response_size);
-        result = 200;
-    }    
-    else if (strcmp("AUXTIME", strupr((char*)method_name)) == 0) // new operation on sfdc terminal
-    {        
-        setCurrentTimeType(Auxiliary);
-        enqueueStatusMsg(&deviceStatus, &samplingMsg, "Cloud to device: AUXTIME.");
-        ESP_LOGI(TAG, "Auxiliary time forced set by cloud to device message. Payload: %s", payload); // todo correct string handling
-
-        const char deviceMethodResponse[] = "{ \"Response\": \"New auxiliary time triggered.\" }";
-        *response_size = sizeof(deviceMethodResponse)-1;
-        *response = malloc(*response_size);
-        (void)memcpy(*response, deviceMethodResponse, *response_size);
-        result = 200;
-    }    
-    else if (strcmp("UNPRODTIME", strupr((char*)method_name)) == 0) // new operation on sfdc terminal
-    {        
-        setCurrentTimeType(Unproductive);
-        enqueueStatusMsg(&deviceStatus, &samplingMsg, "Cloud to device: UNPRODTIME.");
-        ESP_LOGI(TAG, "Unproductive time forced set by cloud to device message. Payload: %s", payload); // todo correct string handling
-
-        const char deviceMethodResponse[] = "{ \"Response\": \"New unproductive time triggered.\" }";
-        *response_size = sizeof(deviceMethodResponse)-1;
-        *response = malloc(*response_size);
-        (void)memcpy(*response, deviceMethodResponse, *response_size);
-        result = 200;
-    }    
+    if (az_result_succeeded(az_iot_hub_client_methods_response_get_publish_topic(&client->hub, request->request_id, (uint16_t)status, topic, sizeof(topic), NULL)))
+    {
+        esp_mqtt_client_enqueue(client->mqtt, topic, response, 0, 0, 0, true);
+    }
     else
     {
-        ESP_LOGW(TAG, "Unknown cloud to device message received.");
-        enqueueStatusMsg(&deviceStatus, &samplingMsg, "Cloud to device: UNKNOWN.");
-        // All other entries are ignored.
-        const char deviceMethodResponse[] = "{ \"Response\": \"Unknown method call.\" }";
-        *response_size = sizeof(deviceMethodResponse)-1;
-        *response = malloc(*response_size);
-        (void)memcpy(*response, deviceMethodResponse, *response_size);
-        result = -1;
+        ESP_LOGE(TAG, "Failed to build direct method response topic");
     }
-
-    return result;
 }
 
+static void dispatch_message(struct mc_iothub_client *client, const char *topic, const char *payload)
+{
+    az_span topicSpan = az_span_create_from_str((char *)topic);
+    az_iot_hub_client_method_request methodRequest;
+    az_iot_hub_client_twin_response twinResponse;
 
-IOTHUBMESSAGE_DISPOSITION_RESULT deviceMessageCallback(IOTHUB_MESSAGE_HANDLE message, void* userContextCallback)
-{    
-    const char* string_msg = NULL;
-    const unsigned char* byteArrayBuffer;
-    size_t bufferSize;
-
-    // update device status
-    incrementMsgReceived();
-
-    if (message == NULL)
+    if (az_result_succeeded(az_iot_hub_client_methods_parse_received_topic(&client->hub, topicSpan, &methodRequest)))
     {
-        ESP_LOGE("MSGCB", "Message is NULL");
-        return IOTHUBMESSAGE_REJECTED;
+        handle_method_request(client, &methodRequest, payload);
     }
-        
-    if (IoTHubMessage_GetContentType(message) == IOTHUBMESSAGE_STRING)
+    else if (az_result_succeeded(az_iot_hub_client_twin_parse_received_topic(&client->hub, topicSpan, &twinResponse)))
     {
-        string_msg = IoTHubMessage_GetString(message);
-        ESP_LOGI("MSGCALLBACK", "STRING Type: Message callback: %s", string_msg);
+        handle_twin_response(&twinResponse, payload);
     }
-
-    if (IoTHubMessage_GetContentType(message) == IOTHUBMESSAGE_BYTEARRAY)
+    else
     {
-        IoTHubMessage_GetByteArray(message, &byteArrayBuffer, &bufferSize);
-        string_msg = (const char *) byteArrayBuffer;
-        ESP_LOGI("MSGCALLBACK", "BYTEARRAY Type: Message callback: %s", string_msg);        
+        ESP_LOGW(TAG, "Message on unexpected topic received: %s", topic);
     }
-    
-    
-    if (string_msg == NULL)
-    {
-        ESP_LOGE(TAG, "Error receiving message callback.");
-        return IOTHUBMESSAGE_REJECTED;
-    }
-
-    return IOTHUBMESSAGE_REJECTED;
 }
 
+// large messages are delivered in chunks, collect them before dispatching
+static void handle_mqtt_data(struct mc_iothub_client *client, esp_mqtt_event_handle_t event)
+{
+    if (event->current_data_offset == 0)
+    {
+        free(client->rxTopic);
+        free(client->rxData);
+        client->rxTopic = strndup(event->topic, event->topic_len);
+        client->rxData = malloc(event->total_data_len + 1);
+    }
+
+    if (client->rxTopic == NULL || client->rxData == NULL ||
+        event->current_data_offset + event->data_len > event->total_data_len)
+    {
+        ESP_LOGE(TAG, "Failed to receive message, %d bytes", event->total_data_len);
+        return;
+    }
+
+    memcpy(client->rxData + event->current_data_offset, event->data, event->data_len);
+    if (event->current_data_offset + event->data_len < event->total_data_len)
+    {
+        return;
+    }
+
+    client->rxData[event->total_data_len] = '\0';
+    dispatch_message(client, client->rxTopic, client->rxData);
+
+    free(client->rxTopic);
+    free(client->rxData);
+    client->rxTopic = NULL;
+    client->rxData = NULL;
+}
+
+static void mqtt_event_handler(void *handlerArgs, esp_event_base_t base, int32_t eventId, void *eventData)
+{
+    struct mc_iothub_client *client = (struct mc_iothub_client *)handlerArgs;
+    esp_mqtt_event_handle_t event = (esp_mqtt_event_handle_t)eventData;
+
+    switch ((esp_mqtt_event_id_t)eventId)
+    {
+        case MQTT_EVENT_CONNECTED:
+            ESP_LOGI(TAG, "AZURE INFO: Connected to IoT Hub %s", client->hostName);
+            client->connected = true;
+            client->authRejected = false;
+
+            esp_mqtt_client_subscribe(client->mqtt, AZ_IOT_HUB_CLIENT_METHODS_SUBSCRIBE_TOPIC, 1);
+            esp_mqtt_client_subscribe(client->mqtt, AZ_IOT_HUB_CLIENT_TWIN_RESPONSE_SUBSCRIBE_TOPIC, 1);
+            esp_mqtt_client_subscribe(client->mqtt, AZ_IOT_HUB_CLIENT_TWIN_PATCH_SUBSCRIBE_TOPIC, 1);
+
+            sync_device_twin(client);
+            break;
+
+        case MQTT_EVENT_DISCONNECTED:
+            ESP_LOGW(TAG, "AZURE INFO: Disconnected from IoT Hub");
+            client->connected = false;
+            break;
+
+        case MQTT_EVENT_DATA:
+            handle_mqtt_data(client, event);
+            break;
+
+        case MQTT_EVENT_ERROR:
+            if (event->error_handle->error_type == MQTT_ERROR_TYPE_CONNECTION_REFUSED)
+            {
+                ESP_LOGE(TAG, "AZURE INFO: IoT Hub refused connection, return code %d", event->error_handle->connect_return_code);
+                if (event->error_handle->connect_return_code == MQTT_CONNECTION_REFUSE_BAD_USERNAME ||
+                    event->error_handle->connect_return_code == MQTT_CONNECTION_REFUSE_NOT_AUTHORIZED)
+                {
+                    // SAS token is renewed in process_azure_msgs
+                    client->authRejected = true;
+                }
+            }
+            else
+            {
+                ESP_LOGE(TAG, "AZURE INFO: MQTT transport error, esp_tls error 0x%x, tls stack error 0x%x",
+                         event->error_handle->esp_tls_last_esp_err, event->error_handle->esp_tls_stack_err);
+            }
+            break;
+
+        default:
+            break;
+    }
+}
+
+mc_iothub_handle_t init_iothub_client(char *deviceId)
+{
+    DeviceConfig devConfig;
+    esp_mqtt_client_config_t mqttConfig;
+    char *sasKeyBase64 = NULL;
+    uint8_t propertyBuffer[64];
+    az_iot_message_properties telemetryProperties;
+    struct mc_iothub_client *client = calloc(1, sizeof(struct mc_iothub_client));
+
+    if (client == NULL)
+    {
+        ESP_LOGE(TAG,"AZURE INFO: Error initializing Azure IoT Client");
+        return NULL;
+    }
+
+    // a failed precondition is a programming error, reboot instead of the default endless loop
+    az_precondition_failed_set_callback(abort);
+
+    // SAS tokens need the current time
+    wait_for_network_time();
+
+    // get the device config from ppm iot central and provide connection string etc.
+    get_device_config(deviceId);
+    ESP_LOGI(TAG, "IoT Central device config loaded for device %s", deviceId);
+
+    // get device configuration struct for connection string
+    devConfig = get_device_config_data();
+    if (devConfig.deviceConnectionString != NULL)
+    {
+        client->hostName = connection_string_value(devConfig.deviceConnectionString, "HostName");
+        client->deviceId = connection_string_value(devConfig.deviceConnectionString, "DeviceId");
+        sasKeyBase64 = connection_string_value(devConfig.deviceConnectionString, "SharedAccessKey");
+    }
+
+    if (client->hostName == NULL || client->deviceId == NULL || sasKeyBase64 == NULL ||
+        mbedtls_base64_decode(client->sasKey, sizeof(client->sasKey), &client->sasKeyLen, (const unsigned char *)sasKeyBase64, strlen(sasKeyBase64)) != 0)
+    {
+        ESP_LOGE(TAG, "AZURE INFO: Invalid device connection string");
+        goto error;
+    }
+    ESP_LOGI(TAG, "IoT Hub is %s, device id is %s", client->hostName, client->deviceId);
+
+    // running firmware version is reported in the device twin
+    strlcpy(currentSoftwareVersion, esp_app_get_description()->version, sizeof(currentSoftwareVersion));
+    currentDeviceTwin.currentSoftwareVersion = currentSoftwareVersion;
+    ESP_LOGI(TAG, "Setting up Azure Device Twin. App project is %s, App version is %s", esp_app_get_description()->project_name, currentSoftwareVersion);
+
+    if (az_result_failed(az_iot_hub_client_init(&client->hub, az_span_create_from_str(client->hostName), az_span_create_from_str(client->deviceId), NULL)) ||
+        az_result_failed(az_iot_hub_client_get_user_name(&client->hub, client->userName, sizeof(client->userName), NULL)) ||
+        generate_sas_token(client) != ESP_OK)
+    {
+        ESP_LOGE(TAG,"AZURE INFO: Error initializing Azure IoT Client");
+        goto error;
+    }
+
+    // telemetry is sent as utf-8 json, so it can be routed by message body
+    if (az_result_failed(az_iot_message_properties_init(&telemetryProperties, AZ_SPAN_FROM_BUFFER(propertyBuffer), 0)) ||
+        az_result_failed(az_iot_message_properties_append(&telemetryProperties, AZ_SPAN_FROM_STR(AZ_IOT_MESSAGE_PROPERTIES_CONTENT_TYPE), AZ_SPAN_FROM_STR("application%2Fjson"))) ||
+        az_result_failed(az_iot_message_properties_append(&telemetryProperties, AZ_SPAN_FROM_STR(AZ_IOT_MESSAGE_PROPERTIES_CONTENT_ENCODING), AZ_SPAN_FROM_STR("utf-8"))) ||
+        az_result_failed(az_iot_hub_client_telemetry_get_publish_topic(&client->hub, &telemetryProperties, client->telemetryTopic, sizeof(client->telemetryTopic), NULL)))
+    {
+        ESP_LOGE(TAG,"AZURE INFO: Error initializing Azure IoT Client");
+        goto error;
+    }
+
+    fill_mqtt_config(client, &mqttConfig);
+    client->mqtt = esp_mqtt_client_init(&mqttConfig);
+    if (client->mqtt == NULL ||
+        esp_mqtt_client_register_event(client->mqtt, MQTT_EVENT_ANY, mqtt_event_handler, client) != ESP_OK ||
+        esp_mqtt_client_start(client->mqtt) != ESP_OK)
+    {
+        ESP_LOGE(TAG,"AZURE INFO: Error initializing Azure IoT Client");
+        goto error;
+    }
+
+    free(sasKeyBase64);
+
+    return client;
+
+error:
+    free(sasKeyBase64);
+    destroy_iothub_client(client);
+
+    return NULL;
+}
+
+int send_azure_msgs(char *msgToSend, mc_iothub_handle_t iothub_deviceclient)
+{
+    if (iothub_deviceclient == NULL)
+    {
+        ESP_LOGE(TAG, "AZURE INFO: ERROR-IoT Hub Client Handle is NULL");
+        return -1;
+    }
+
+    // message is stored and sent by the mqtt task, also when currently disconnected
+    if (esp_mqtt_client_enqueue(iothub_deviceclient->mqtt, iothub_deviceclient->telemetryTopic, msgToSend, 0, 1, 0, true) < 0)
+    {
+        ESP_LOGE(TAG, "AZURE INFO: ERROR-Failed Azure Send Event");
+        return -1;
+    }
+
+    ESP_LOGI(TAG, "AZURE INFO: Completed Message successfully accepted to Azure transmission");
+
+    return 0;
+}
+
+void process_azure_msgs(mc_iothub_handle_t iothub_deviceclient)
+{
+    esp_mqtt_client_config_t mqttConfig;
+
+    if (iothub_deviceclient == NULL)
+    {
+        return;
+    }
+
+    if (!iothub_deviceclient->authRejected &&
+        time(NULL) < iothub_deviceclient->sasTokenExpiry - SAS_TOKEN_REFRESH_MARGIN_SEC)
+    {
+        if (!iothub_deviceclient->connected)
+        {
+            ESP_LOGW(TAG, "AZURE INFO: Not connected to IoT Hub, messages are queued");
+        }
+        return;
+    }
+
+    // IoT Hub drops the connection when the SAS token expires, reconnect with a new one
+    ESP_LOGI(TAG, "AZURE INFO: Renewing SAS token");
+    if (generate_sas_token(iothub_deviceclient) != ESP_OK)
+    {
+        return;
+    }
+
+    fill_mqtt_config(iothub_deviceclient, &mqttConfig);
+    esp_mqtt_client_stop(iothub_deviceclient->mqtt);
+    iothub_deviceclient->connected = false;
+    iothub_deviceclient->authRejected = false;
+    esp_mqtt_set_config(iothub_deviceclient->mqtt, &mqttConfig);
+    esp_mqtt_client_start(iothub_deviceclient->mqtt);
+}
+
+void destroy_iothub_client(mc_iothub_handle_t iothub_deviceclient)
+{
+    if (iothub_deviceclient == NULL)
+    {
+        return;
+    }
+
+    ESP_LOGI(TAG, "AZURE INFO: Cleaning up - Removing Device Client");
+    if (iothub_deviceclient->mqtt != NULL)
+    {
+        esp_mqtt_client_destroy(iothub_deviceclient->mqtt);
+    }
+
+    free(iothub_deviceclient->rxTopic);
+    free(iothub_deviceclient->rxData);
+    free(iothub_deviceclient->hostName);
+    free(iothub_deviceclient->deviceId);
+    free(iothub_deviceclient);
+}
