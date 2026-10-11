@@ -24,8 +24,7 @@
     "sdkconfig.h": "c",
     "mc_data.h": "c"
   },
- "git.ignoreLimitWarning": true,
-  "idf.portWin": "COM6",
+"git.ignoreLimitWarning": true,
   "idf.flashType": "JTAG",
   "cmake.configureOnOpen": true,
   "idf.adapterTargetName": "esp32",
@@ -35,5 +34,7 @@
   ],
   "idf.espIdfPathWin": "C:/Users/ajege/.espressif/frameworks/esp-idf-v5.5/",
   "idf.toolsPathWin": "C:\\Users\\ajege\\.espressif",
-  "idf.pythonInstallPath": "C:\\Users\\ajege\\.espressif\\tools\\idf-python\\3.11.2\\python.exe"
+  "idf.pythonInstallPath": "C:\\Users\\ajege\\.espressif\\tools\\idf-python\\3.11.2\\python.exe",
+  "idf.port": "COM6",
+  "idf.currentSetup": "C:/Users/ajege/.espressif/frameworks/esp-idf-v5.5/"
 }
