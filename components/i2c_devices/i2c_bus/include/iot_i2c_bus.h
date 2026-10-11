@@ -13,7 +13,10 @@
 // limitations under the License.
 #ifndef _IOT_I2C_BUS_H_
 #define _IOT_I2C_BUS_H_
-#include "driver/i2c.h"
+#include <stddef.h>
+#include <stdint.h>
+#include "esp_err.h"
+#include "driver/i2c_master.h"
 
 #ifdef __cplusplus
 extern "C"
@@ -23,16 +26,18 @@ extern "C"
 typedef void* i2c_bus_handle_t;
 
 /**
- * @brief Create and init I2C bus and return a I2C bus handle
+ * @brief Create and init I2C master bus and return a I2C bus handle
  *
  * @param port I2C port number
- * @param conf Pointer to I2C parameters
+ * @param sda_io gpio number of the SDA signal
+ * @param scl_io gpio number of the SCL signal
+ * @param clk_speed_hz I2C clock frequency
  *
  * @return
  *     - NULL Fail
  *     - Others Success
  */
-i2c_bus_handle_t iot_i2c_bus_create(i2c_port_t port, i2c_config_t* conf);
+i2c_bus_handle_t iot_i2c_bus_create(i2c_port_num_t port, int sda_io, int scl_io, uint32_t clk_speed_hz);
 
 /**
  * @brief Delete and release the I2C bus object
@@ -45,73 +50,52 @@ i2c_bus_handle_t iot_i2c_bus_create(i2c_port_t port, i2c_config_t* conf);
 esp_err_t iot_i2c_bus_delete(i2c_bus_handle_t bus);
 
 /**
- * @brief I2C start sending buffered commands
+ * @brief Write data to a device: start - address - data - stop
  *
  * @param bus I2C bus handle
- * @param cmd I2C cmd handle
- * @param ticks_to_wait Maximum blocking time
+ * @param dev_addr 7-bit I2C address of the device
+ * @param data Data to write
+ * @param len Number of bytes to write
  *
  * @return
  *     - ESP_OK Success
- *     - ESP_FAIL Fail
+ *     - ESP_FAIL Fail, e.g. device doesn't ACK the transfer
  */
-esp_err_t iot_i2c_bus_cmd_begin(i2c_bus_handle_t bus, i2c_cmd_handle_t cmd,
-portBASE_TYPE ticks_to_wait);
+esp_err_t iot_i2c_bus_write(i2c_bus_handle_t bus, uint16_t dev_addr, const uint8_t *data, size_t len);
+
+/**
+ * @brief Read data from a device: start - address - data - stop
+ *
+ * @param bus I2C bus handle
+ * @param dev_addr 7-bit I2C address of the device
+ * @param data Buffer for the data read
+ * @param len Number of bytes to read
+ *
+ * @return
+ *     - ESP_OK Success
+ *     - ESP_FAIL Fail, e.g. device doesn't ACK the transfer
+ */
+esp_err_t iot_i2c_bus_read(i2c_bus_handle_t bus, uint16_t dev_addr, uint8_t *data, size_t len);
+
+/**
+ * @brief Write data to a device and read from it without releasing the bus:
+ *        start - address - write data - start - address - read data - stop
+ *
+ * @param bus I2C bus handle
+ * @param dev_addr 7-bit I2C address of the device
+ * @param write_data Data to write
+ * @param write_len Number of bytes to write
+ * @param read_data Buffer for the data read
+ * @param read_len Number of bytes to read
+ *
+ * @return
+ *     - ESP_OK Success
+ *     - ESP_FAIL Fail, e.g. device doesn't ACK the transfer
+ */
+esp_err_t iot_i2c_bus_write_read(i2c_bus_handle_t bus, uint16_t dev_addr, const uint8_t *write_data, size_t write_len,
+                                 uint8_t *read_data, size_t read_len);
 #ifdef __cplusplus
 }
-#endif
-
-#ifdef __cplusplus
-/**
- * class of I2c bus
- */
-class CI2CBus
-{
-private:
-    i2c_bus_handle_t m_i2c_bus_handle;
-
-    /**
-     * prevent copy constructing
-     */
-    CI2CBus(const CI2CBus&);
-    CI2CBus& operator =(const CI2CBus&);
-public:
-    /**
-     * @brief Constructor for CI2CBus class
-     * @param i2c_port I2C hardware port
-     * @param scl_io gpio index for slc pin
-     * @param sda_io gpio index for sda pin
-     * @param clk_hz I2C clock frequency
-     * @param i2c_mode mode for I2C bus
-     *
-     */
-    CI2CBus(i2c_port_t i2c_port, gpio_num_t scl_io, gpio_num_t sda_io,
-            int clk_hz = 100000, i2c_mode_t i2c_mode = I2C_MODE_MASTER);
-
-    /**
-     * @brief Destructor function of CI2CBus class
-     */
-    ~CI2CBus();
-
-    /**
-     * @brief Send command and data to I2C bus
-     * @param cmd pointor to command link
-     * @ticks_to_wait max block time
-     * @return
-     *     - ESP_OK Success
-     *     - ESP_ERR_INVALID_ARG Parameter error
-     *     - ESP_FAIL Sending command error, slave doesn't ACK the transfer.
-     *     - ESP_ERR_INVALID_STATE I2C driver not installed or not in master mode.
-     *     - ESP_ERR_TIMEOUT Operation timeout because the bus is busy.
-     */
-    esp_err_t send(i2c_cmd_handle_t cmd, portBASE_TYPE ticks_to_wait);
-
-    /**
-     * @brief Get bus handle
-     * @return bus handle
-     */
-    i2c_bus_handle_t get_bus_handle();
-};
 #endif
 
 #endif

@@ -11,7 +11,6 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-#include "driver/i2c.h"
 #include "soc/io_mux_reg.h"
 #include "esp32/rom/gpio.h"
 #include "iot_ssd1306.h"
@@ -50,19 +49,9 @@ esp_err_t iot_ssd1306_write_byte(ssd1306_handle_t dev, uint8_t chData,
 #endif
 
 #ifdef INTERFACE_IIC
-    i2c_cmd_handle_t cmd = i2c_cmd_link_create();
-    i2c_master_start(cmd);
-    i2c_master_write_byte(cmd, (device->dev_addr << 1) | WRITE_BIT,
-    ACK_CHECK_EN);
-    if (chCmd) {
-        i2c_master_write_byte(cmd, SSD1306_WRITE_DAT, ACK_CHECK_EN);
-    } else {
-        i2c_master_write_byte(cmd, SSD1306_WRITE_CMD, ACK_CHECK_EN);
-    }
-    i2c_master_write_byte(cmd, chData, ACK_CHECK_EN);
-    i2c_master_stop(cmd);
-    ret = iot_i2c_bus_cmd_begin(device->bus, cmd, 1000 / portTICK_PERIOD_MS);
-    i2c_cmd_link_delete(cmd);
+    //start-device_addr-control_byte-data-stop
+    uint8_t buf[2] = { chCmd ? SSD1306_WRITE_DAT : SSD1306_WRITE_CMD, chData };
+    ret = iot_i2c_bus_write(device->bus, device->dev_addr, buf, sizeof(buf));
 #endif
     return ret;
 }

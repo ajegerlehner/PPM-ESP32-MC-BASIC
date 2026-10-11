@@ -5,5 +5,5 @@ idf_component_register(
     INCLUDE_DIRS "."
                  "i2c_bus/include"
                  "others/ssd1306/include"
-    REQUIRES driver
+    REQUIRES esp_driver_i2c esp_driver_gpio
 )

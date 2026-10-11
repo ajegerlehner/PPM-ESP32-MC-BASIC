@@ -7,7 +7,6 @@
 **/
 
 #include <stdio.h>
-#include "driver/i2c.h"
 #include "mc_common.h"
 #include "mc_io_expander_hal.h"
 #include "mc_mcp23017.h"
@@ -37,19 +36,12 @@ extern DeviceHWStatus deviceHWStatus;
 
 int mcp23017d_init()
 {
-	i2c_cmd_handle_t cmd = i2c_cmd_link_create();
 	int ret;
 
 	ESP_LOGI(TAG, "MCP23017 display shield initializing...");
 
 	// Initialize IODIRA register, set all ports to output
-	i2c_master_start(cmd);
-	i2c_master_write_byte(cmd, MCP23017D_ADDR << 1 | WRITE_BIT, ACK_CHECK_EN);
-	i2c_master_write_byte(cmd, MCP23017_IODIRA_REG, ACK_CHECK_EN);				// IODIRA
-	i2c_master_write_byte(cmd, MCP23017_IODIRA_INIT, ACK_CHECK_EN);				//Set all ports directions
-	i2c_master_stop(cmd);
-	ret = i2c_master_cmd_begin(I2C_MASTER_NUM, cmd, 1000 / portTICK_PERIOD_MS);
-	i2c_cmd_link_delete(cmd);
+	ret = iot_i2c_bus_write(i2c_bus, MCP23017D_ADDR, (uint8_t[]){ MCP23017_IODIRA_REG, MCP23017_IODIRA_INIT }, 2);		//Set all ports directions
 
 	if (ret == ESP_FAIL) 
 	{
@@ -60,14 +52,7 @@ int mcp23017d_init()
 	ESP_LOGI(TAG, "MCP23017 display shield PORT A initialized.");
 
 	// Initialize IODIRB register, set all ports to output, ports 0-2 inputs
-	cmd = i2c_cmd_link_create();
-	i2c_master_start(cmd);
-	i2c_master_write_byte(cmd, MCP23017D_ADDR << 1 | WRITE_BIT, ACK_CHECK_EN);
-	i2c_master_write_byte(cmd, MCP23017_IODIRB_REG, ACK_CHECK_EN);				// IODIRB
-	i2c_master_write_byte(cmd, MCP23017_IODIRB_INIT, ACK_CHECK_EN);				//Set first three ports to input
-	i2c_master_stop(cmd);
-	ret = i2c_master_cmd_begin(I2C_MASTER_NUM, cmd, 1000 / portTICK_PERIOD_MS);
-	i2c_cmd_link_delete(cmd);
+	ret = iot_i2c_bus_write(i2c_bus, MCP23017D_ADDR, (uint8_t[]){ MCP23017_IODIRB_REG, MCP23017_IODIRB_INIT }, 2);		//Set first three ports to input
 
 	if (ret == ESP_FAIL) 
 	{
@@ -80,14 +65,7 @@ int mcp23017d_init()
 	vTaskDelay(30 / portTICK_PERIOD_MS);
 
 	// initialize OLATA register
-	cmd = i2c_cmd_link_create();
-	i2c_master_start(cmd);
-	i2c_master_write_byte(cmd, MCP23017D_ADDR << 1 | WRITE_BIT, ACK_CHECK_EN);
-	i2c_master_write_byte(cmd, MCP23017_OLATA_REG, ACK_CHECK_EN);
-	i2c_master_write_byte(cmd, MCP23017_OLAT_CLEAR, ACK_CHECK_EN);					// Clear OLAT register
-	i2c_master_stop(cmd);
-	ret = i2c_master_cmd_begin(I2C_MASTER_NUM, cmd, 1000 / portTICK_PERIOD_MS);
-	i2c_cmd_link_delete(cmd);
+	ret = iot_i2c_bus_write(i2c_bus, MCP23017D_ADDR, (uint8_t[]){ MCP23017_OLATA_REG, MCP23017_OLAT_CLEAR }, 2);		// Clear OLAT register
 
 	if (ret == ESP_FAIL) 
 	{
@@ -97,14 +75,7 @@ int mcp23017d_init()
 	}
 
 	// initialize OLATB register
-	cmd = i2c_cmd_link_create();
-	i2c_master_start(cmd);
-	i2c_master_write_byte(cmd, MCP23017D_ADDR << 1 | WRITE_BIT, ACK_CHECK_EN);
-	i2c_master_write_byte(cmd, MCP23017_OLATB_REG, ACK_CHECK_EN);
-	i2c_master_write_byte(cmd, MCP23017_OLAT_CLEAR, ACK_CHECK_EN);					// Clear OLAT register
-	i2c_master_stop(cmd);
-	ret = i2c_master_cmd_begin(I2C_MASTER_NUM, cmd, 1000 / portTICK_PERIOD_MS);
-	i2c_cmd_link_delete(cmd);
+	ret = iot_i2c_bus_write(i2c_bus, MCP23017D_ADDR, (uint8_t[]){ MCP23017_OLATB_REG, MCP23017_OLAT_CLEAR }, 2);		// Clear OLAT register
 
 	if (ret == ESP_FAIL) 
 	{
@@ -117,14 +88,7 @@ int mcp23017d_init()
 	mcp23017d_olatb_register = 0x00;
 
 	// enable interrups on port B - pin mapping is in GPINTENB_VAL
-	cmd = i2c_cmd_link_create();
-	i2c_master_start(cmd);
-	i2c_master_write_byte(cmd, MCP23017D_ADDR << 1 | WRITE_BIT, ACK_CHECK_EN);
-	i2c_master_write_byte(cmd, MCP23017_GPINTENB_REG, ACK_CHECK_EN);
-	i2c_master_write_byte(cmd, MCP23017_GPINTENB_VAL, ACK_CHECK_EN);
-	i2c_master_stop(cmd);
-	ret = i2c_master_cmd_begin(I2C_MASTER_NUM, cmd, 1000 / portTICK_PERIOD_MS);
-	i2c_cmd_link_delete(cmd);
+	ret = iot_i2c_bus_write(i2c_bus, MCP23017D_ADDR, (uint8_t[]){ MCP23017_GPINTENB_REG, MCP23017_GPINTENB_VAL }, 2);
 
 	if (ret == ESP_FAIL) 
 	{
@@ -134,14 +98,7 @@ int mcp23017d_init()
 	}
 
 	// set default comparison values on port B - pin mapping is in DEFVALB_VAL
-	cmd = i2c_cmd_link_create();
-	i2c_master_start(cmd);
-	i2c_master_write_byte(cmd, MCP23017D_ADDR << 1 | WRITE_BIT, ACK_CHECK_EN);
-	i2c_master_write_byte(cmd, MCP23017_DEFVALB_REG, ACK_CHECK_EN);
-	i2c_master_write_byte(cmd, MCP23017_DEFVALB_VAL, ACK_CHECK_EN);
-	i2c_master_stop(cmd);
-	ret = i2c_master_cmd_begin(I2C_MASTER_NUM, cmd, 1000 / portTICK_PERIOD_MS);
-	i2c_cmd_link_delete(cmd);
+	ret = iot_i2c_bus_write(i2c_bus, MCP23017D_ADDR, (uint8_t[]){ MCP23017_DEFVALB_REG, MCP23017_DEFVALB_VAL }, 2);
 
 	if (ret == ESP_FAIL) 
 	{
@@ -151,14 +108,7 @@ int mcp23017d_init()
 	}
 
 	// set pins for interrupt comparison mode on port B - pin mapping is in INTCONB_VAL
-	cmd = i2c_cmd_link_create();
-	i2c_master_start(cmd);
-	i2c_master_write_byte(cmd, MCP23017D_ADDR << 1 | WRITE_BIT, ACK_CHECK_EN);
-	i2c_master_write_byte(cmd, MCP23017_INTCONB_REG, ACK_CHECK_EN);
-	i2c_master_write_byte(cmd, MCP23017_INTCONB_VAL, ACK_CHECK_EN);
-	i2c_master_stop(cmd);
-	ret = i2c_master_cmd_begin(I2C_MASTER_NUM, cmd, 1000 / portTICK_PERIOD_MS);
-	i2c_cmd_link_delete(cmd);
+	ret = iot_i2c_bus_write(i2c_bus, MCP23017D_ADDR, (uint8_t[]){ MCP23017_INTCONB_REG, MCP23017_INTCONB_VAL }, 2);
 
 	if (ret == ESP_FAIL) 
 	{
@@ -183,7 +133,6 @@ void mcp23017d_set_pin(int _pin, int _pinValue)
 	if (!deviceHWStatus.mcp23017d_present)
 		return;
 
-	i2c_cmd_handle_t cmd = i2c_cmd_link_create();
 	int ret;
 
 	if (_pinValue == 0)
@@ -196,13 +145,7 @@ void mcp23017d_set_pin(int _pin, int _pinValue)
 	}
 	
 	// Update OLATA register
-	i2c_master_start(cmd);
-	i2c_master_write_byte(cmd, MCP23017D_ADDR << 1 | WRITE_BIT, ACK_CHECK_EN);
-	i2c_master_write_byte(cmd, MCP23017_OLATA_REG, ACK_CHECK_EN);
-	i2c_master_write_byte(cmd, mcp23017d_olata_register, ACK_CHECK_EN);								
-	i2c_master_stop(cmd);
-	ret = i2c_master_cmd_begin(I2C_MASTER_NUM, cmd, 1000 / portTICK_PERIOD_MS);
-	i2c_cmd_link_delete(cmd);
+	ret = iot_i2c_bus_write(i2c_bus, MCP23017D_ADDR, (uint8_t[]){ MCP23017_OLATA_REG, mcp23017d_olata_register }, 2);
 
 	if (ret == ESP_FAIL)
 	{
@@ -236,28 +179,15 @@ void mcp23017_signal_pin(int _mcp23017d_pin, int _delay)
 
 bool mcp23017_pin_changed(uint8_t *pin)
 {
-	i2c_cmd_handle_t cmd;
 	uint8_t regValue = 0;
 	uint8_t capValue = 0;	
 	int ret;
 
 	// get interrupt capture register value - this will also reset INTFB register
-	cmd = i2c_cmd_link_create();
-	i2c_master_start(cmd);
-	i2c_master_write_byte(cmd, MCP23017D_ADDR << 1 | WRITE_BIT, ACK_CHECK_EN);
-	i2c_master_write_byte(cmd, MCP23017_INTCAPB_REG, ACK_CHECK_EN);
-	i2c_master_stop(cmd);
-	ret = i2c_master_cmd_begin(I2C_MASTER_NUM, cmd, 1000 / portTICK_PERIOD_MS);
-	i2c_cmd_link_delete(cmd);
+	ret = iot_i2c_bus_write(i2c_bus, MCP23017D_ADDR, (uint8_t[]){ MCP23017_INTCAPB_REG }, 1);
 
 	// get interrupt capture register value
-	cmd = i2c_cmd_link_create();
-	i2c_master_start(cmd);
-	i2c_master_write_byte(cmd, MCP23017D_ADDR << 1 | READ_BIT, ACK_CHECK_EN);
-	i2c_master_read_byte(cmd, &capValue, 0x01);
-	i2c_master_stop(cmd);
-	ret = i2c_master_cmd_begin(I2C_MASTER_NUM, cmd, 1000 / portTICK_PERIOD_MS);
-	i2c_cmd_link_delete(cmd);
+	ret = iot_i2c_bus_read(i2c_bus, MCP23017D_ADDR, &capValue, 1);
 
 	if (ret == ESP_FAIL)
 	{
@@ -265,13 +195,7 @@ bool mcp23017_pin_changed(uint8_t *pin)
 	}
 
 	// get interrupt flag register value
-	cmd = i2c_cmd_link_create();
-	i2c_master_start(cmd);
-	i2c_master_write_byte(cmd, MCP23017D_ADDR << 1 | WRITE_BIT, ACK_CHECK_EN);
-	i2c_master_write_byte(cmd, MCP23017_INTFB_REG, ACK_CHECK_EN);
-	i2c_master_stop(cmd);
-	ret = i2c_master_cmd_begin(I2C_MASTER_NUM, cmd, 1000 / portTICK_PERIOD_MS);
-	i2c_cmd_link_delete(cmd);
+	ret = iot_i2c_bus_write(i2c_bus, MCP23017D_ADDR, (uint8_t[]){ MCP23017_INTFB_REG }, 1);
 
 	if (ret == ESP_FAIL)
 	{
@@ -279,13 +203,7 @@ bool mcp23017_pin_changed(uint8_t *pin)
 	}
 
 	// get interrupt flag register value
-	cmd = i2c_cmd_link_create();
-	i2c_master_start(cmd);
-	i2c_master_write_byte(cmd, MCP23017D_ADDR << 1 | READ_BIT, ACK_CHECK_EN);
-	i2c_master_read_byte(cmd, &regValue, 0x00);
-	i2c_master_stop(cmd);
-	ret = i2c_master_cmd_begin(I2C_MASTER_NUM, cmd, 1000 / portTICK_PERIOD_MS);
-	i2c_cmd_link_delete(cmd);
+	ret = iot_i2c_bus_read(i2c_bus, MCP23017D_ADDR, &regValue, 1);
 
 	if (ret == ESP_FAIL)
 	{

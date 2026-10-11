@@ -20,7 +20,6 @@ extern "C"
 #endif
 
 #include "driver/gpio.h"
-#include "driver/i2c.h"
 #include "iot_i2c_bus.h"
 #include "stdint.h"
 

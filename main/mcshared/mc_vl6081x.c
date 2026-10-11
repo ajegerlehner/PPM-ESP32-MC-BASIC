@@ -7,7 +7,6 @@
 **/
 
 #include <stdio.h>
-#include "driver/i2c.h"
 #include "mc_common.h"
 #include "mc_vl6180x.h"
 

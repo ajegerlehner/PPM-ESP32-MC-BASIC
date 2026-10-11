@@ -12,7 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 #include <stdio.h>
-#include "driver/i2c.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 #include "iot_i2c_bus.h"
 #include "iot_bme280.h"
 #include "math.h"
@@ -50,42 +51,28 @@ esp_err_t iot_bme280_delete(bme280_handle_t dev, bool del_bus)
 esp_err_t iot_bme280_write_byte(bme280_handle_t dev, uint8_t addr, uint8_t data)
 {
     //start-device_addr-word_addr-data-stop
-    esp_err_t ret;
     bme280_dev_t* device = (bme280_dev_t*) dev;
-    i2c_cmd_handle_t cmd = i2c_cmd_link_create();
-    i2c_master_start(cmd);
-    i2c_master_write_byte(cmd, (device->dev_addr << 1) | WRITE_BIT,
-    ACK_CHECK_EN);
-    i2c_master_write_byte(cmd, addr, ACK_CHECK_EN);
-    i2c_master_write_byte(cmd, data, ACK_CHECK_EN);
-    i2c_master_stop(cmd);
-    ret = iot_i2c_bus_cmd_begin(device->bus, cmd, 1000 / portTICK_PERIOD_MS);
-    i2c_cmd_link_delete(cmd);
-    return ret;
+    uint8_t buf[2] = { addr, data };
+    return iot_i2c_bus_write(device->bus, device->dev_addr, buf, sizeof(buf));
 }
 
 esp_err_t iot_bme280_write(bme280_handle_t dev, uint8_t start_addr,
         uint8_t write_num, uint8_t *data_buf)
 {
     uint32_t i = 0;
-    i2c_cmd_handle_t cmd;
     esp_err_t ret = ESP_FAIL;
     uint32_t writeNum = write_num;
     bme280_dev_t* device = (bme280_dev_t*) dev;
     if (data_buf != NULL) {
         for (uint32_t j = 0; j < write_num; j += 8) {
-            cmd = i2c_cmd_link_create();
-            i2c_master_start(cmd);
-            i2c_master_write_byte(cmd, (device->dev_addr << 1) | WRITE_BIT,
-            ACK_CHECK_EN);
-            i2c_master_write_byte(cmd, start_addr, ACK_CHECK_EN);
+            //start-device_addr-word_addr-data(max. 8 bytes)-stop
+            uint8_t buf[9];
+            size_t len = 0;
+            buf[len++] = start_addr;
             for (i = j; i < ((writeNum >= 8) ? 8 : writeNum); i++) {
-                i2c_master_write_byte(cmd, data_buf[i], ACK_CHECK_EN);
+                buf[len++] = data_buf[i];
             }
-            i2c_master_stop(cmd);
-            ret = iot_i2c_bus_cmd_begin(device->bus, cmd,
-                    1000 / portTICK_PERIOD_MS);
-            i2c_cmd_link_delete(cmd);
+            ret = iot_i2c_bus_write(device->bus, device->dev_addr, buf, len);
 
             writeNum -= 8;              //write num count
             if (ret == ESP_FAIL) {
@@ -99,47 +86,17 @@ esp_err_t iot_bme280_write(bme280_handle_t dev, uint8_t start_addr,
 esp_err_t iot_bme280_read_byte(bme280_handle_t dev, uint8_t addr, uint8_t *data)
 {
     //start-device_addr-word_addr-start-device_addr-data-stop; no_ack of end data
-    esp_err_t ret;
     bme280_dev_t* device = (bme280_dev_t*) dev;
-    i2c_cmd_handle_t cmd = i2c_cmd_link_create();
-    i2c_master_start(cmd);
-    i2c_master_write_byte(cmd, (device->dev_addr << 1) | WRITE_BIT,
-    ACK_CHECK_EN);
-    i2c_master_write_byte(cmd, addr, ACK_CHECK_EN);
-
-    i2c_master_start(cmd);
-    i2c_master_write_byte(cmd, (device->dev_addr << 1) | READ_BIT,
-    ACK_CHECK_EN);
-    i2c_master_read_byte(cmd, data, NACK_VAL);
-    i2c_master_stop(cmd);
-    ret = iot_i2c_bus_cmd_begin(device->bus, cmd, 1000 / portTICK_PERIOD_MS);
-    i2c_cmd_link_delete(cmd);
-    return ret;
+    return iot_i2c_bus_write_read(device->bus, device->dev_addr, &addr, 1, data, 1);
 }
 
 esp_err_t iot_bme280_read(bme280_handle_t dev, uint8_t start_addr,
         uint8_t read_num, uint8_t *data_buf)
 {
-    uint32_t i = 0;
     esp_err_t ret = ESP_FAIL;
     if (data_buf != NULL) {
         bme280_dev_t* device = (bme280_dev_t*) dev;
-        i2c_cmd_handle_t cmd = i2c_cmd_link_create();
-        i2c_master_start(cmd);
-        i2c_master_write_byte(cmd, (device->dev_addr << 1) | WRITE_BIT,
-        ACK_CHECK_EN);
-        i2c_master_write_byte(cmd, start_addr, ACK_CHECK_EN);
-
-        i2c_master_start(cmd);
-        i2c_master_write_byte(cmd, (device->dev_addr << 1) | READ_BIT,
-        ACK_CHECK_EN);
-        for (i = 0; i < read_num - 1; i++) {
-            i2c_master_read_byte(cmd, &data_buf[i], ACK_VAL);
-        }
-        i2c_master_read_byte(cmd, &data_buf[i], NACK_VAL);
-        i2c_master_stop(cmd);
-        ret = iot_i2c_bus_cmd_begin(device->bus, cmd, 1000 / portTICK_PERIOD_MS);
-        i2c_cmd_link_delete(cmd);
+        ret = iot_i2c_bus_write_read(device->bus, device->dev_addr, &start_addr, 1, data_buf, read_num);
     }
     return ret;
 }

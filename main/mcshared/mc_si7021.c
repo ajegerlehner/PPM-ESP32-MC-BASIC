@@ -7,7 +7,8 @@
 **/
 
 #include <stdio.h>
-#include "driver/i2c.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 #include "mc_si7021.h"
 
 #define TAG "SI7021"
@@ -89,13 +90,7 @@ float si7021_read_humidity()
 	//ret = i2c_dev_read(&si7021_dev, &SI7021_HUMIDITY_REGISTER , 1, reading, sizeof(reading));
  
 	// send the command
-	i2c_cmd_handle_t cmd = i2c_cmd_link_create();
-	i2c_master_start(cmd);
-	i2c_master_write_byte(cmd, (SI7021_ADDR << 1) | I2C_MASTER_WRITE, true);
-	i2c_master_write_byte(cmd, SI7021_HUMIDITY_REGISTER, true);
-	i2c_master_stop(cmd);
-	ret = i2c_master_cmd_begin(si7021_dev.port, cmd, 1000 / portTICK_PERIOD_MS);
-	i2c_cmd_link_delete(cmd);
+	ret = iot_i2c_bus_write(i2c_bus, SI7021_ADDR, &SI7021_HUMIDITY_REGISTER, 1);
 	if (ret == ESP_FAIL) 
 	{
 		ESP_LOGE(TAG, "Could not send humidity register value.");
@@ -107,16 +102,8 @@ float si7021_read_humidity()
 	vTaskDelay(50 / portTICK_PERIOD_MS);
 
 	// receive the answer
-	uint8_t msb, lsb, crc;
-	cmd = i2c_cmd_link_create();
-	i2c_master_start(cmd);
-	i2c_master_write_byte(cmd, (SI7021_ADDR << 1) | I2C_MASTER_READ, true);
-	i2c_master_read_byte(cmd, &msb, 0x00);
-	i2c_master_read_byte(cmd, &lsb, 0x00);
-	i2c_master_read_byte(cmd, &crc, 0x01);
-	i2c_master_stop(cmd);
-	ret = i2c_master_cmd_begin(si7021_dev.port, cmd, 1000 / portTICK_PERIOD_MS);
-	i2c_cmd_link_delete(cmd);
+	uint8_t answer[3];		// msb, lsb, crc
+	ret = iot_i2c_bus_read(i2c_bus, SI7021_ADDR, answer, sizeof(answer));
 
 	if (ret == ESP_FAIL) 
 	{
@@ -124,8 +111,8 @@ float si7021_read_humidity()
         return 0.0;
 	}
 
-    reading[1] = msb;
-    reading[0] = lsb;
+    reading[1] = answer[0];
+    reading[0] = answer[1];
     return convertHumidityReading(reading);
 }
 
@@ -137,13 +124,7 @@ float si7021_read_temperature()
     ESP_LOGI(TAG, "Temperature reading...");
 
 	// send the command
-	i2c_cmd_handle_t cmd = i2c_cmd_link_create();
-	i2c_master_start(cmd);
-	i2c_master_write_byte(cmd, (SI7021_ADDR << 1) | I2C_MASTER_WRITE, true);
-	i2c_master_write_byte(cmd, SI7021_TEMP_REGISTER, true);
-	i2c_master_stop(cmd);
-	ret = i2c_master_cmd_begin(si7021_dev.port, cmd, 1000 / portTICK_PERIOD_MS);
-	i2c_cmd_link_delete(cmd);
+	ret = iot_i2c_bus_write(i2c_bus, SI7021_ADDR, &SI7021_TEMP_REGISTER, 1);
 	if (ret == ESP_FAIL) 
 	{
 		ESP_LOGE(TAG, "Could not send temperature register value.");
@@ -155,16 +136,8 @@ float si7021_read_temperature()
 	vTaskDelay(50 / portTICK_PERIOD_MS);
 
 	// receive the answer
-	uint8_t msb, lsb, crc;
-	cmd = i2c_cmd_link_create();
-	i2c_master_start(cmd);
-	i2c_master_write_byte(cmd, (SI7021_ADDR << 1) | I2C_MASTER_READ, true);
-	i2c_master_read_byte(cmd, &msb, 0x00);
-	i2c_master_read_byte(cmd, &lsb, 0x00);
-	i2c_master_read_byte(cmd, &crc, 0x01);
-	i2c_master_stop(cmd);
-	ret = i2c_master_cmd_begin(si7021_dev.port, cmd, 1000 / portTICK_PERIOD_MS);
-	i2c_cmd_link_delete(cmd);
+	uint8_t answer[3];		// msb, lsb, crc
+	ret = iot_i2c_bus_read(i2c_bus, SI7021_ADDR, answer, sizeof(answer));
 
 	if (ret == ESP_FAIL) 
 	{
@@ -172,8 +145,8 @@ float si7021_read_temperature()
         return 0.0;
 	}
 
-    reading[1] = msb;
-    reading[0] = lsb;
+    reading[1] = answer[0];
+    reading[0] = answer[1];
 
     return convertTemperatureReading(reading);
 }

@@ -7,7 +7,6 @@
 **/
 
 #include <stdio.h>
-#include "driver/i2c.h"
 #include "mc_common.h"
 #include "mc_io_expander_hal.h"
 #include "mc_mcp23008.h"
@@ -26,19 +25,12 @@ extern DeviceHWStatus deviceHWStatus;
 
 int mcp23008d_init()
 {
-	i2c_cmd_handle_t cmd = i2c_cmd_link_create();
 	int ret;
 
 	ESP_LOGI(TAG, "MCP23008 display shield initializing...");
 
 	// Initialize IODIRA register, set all ports to output
-	i2c_master_start(cmd);
-	i2c_master_write_byte(cmd, MCP23008D_ADDR << 1 | WRITE_BIT, ACK_CHECK_EN);
-	i2c_master_write_byte(cmd, MCP23008_IODIRA_REG, ACK_CHECK_EN);					// IODIRA
-	i2c_master_write_byte(cmd, MCP23008_IODIRA_CLEAR, ACK_CHECK_EN);				//Set all as outputs on A
-	i2c_master_stop(cmd);
-	ret = i2c_master_cmd_begin(I2C_MASTER_NUM, cmd, 1000 / portTICK_PERIOD_MS);
-	i2c_cmd_link_delete(cmd);
+	ret = iot_i2c_bus_write(i2c_bus, MCP23008D_ADDR, (uint8_t[]){ MCP23008_IODIRA_REG, MCP23008_IODIRA_CLEAR }, 2);		//Set all as outputs on A
 
 	if (ret == ESP_FAIL) 
 	{
@@ -50,14 +42,7 @@ int mcp23008d_init()
 	
 	vTaskDelay(30 / portTICK_PERIOD_MS);
 	// initialize OLAT register
-	cmd = i2c_cmd_link_create();
-	i2c_master_start(cmd);
-	i2c_master_write_byte(cmd, MCP23008D_ADDR << 1 | WRITE_BIT, ACK_CHECK_EN);
-	i2c_master_write_byte(cmd, MCP23008_OLAT_REG, ACK_CHECK_EN);
-	i2c_master_write_byte(cmd, MCP23008_OLAT_CLEAR, ACK_CHECK_EN);					// Clear OLAT register
-	i2c_master_stop(cmd);
-	ret = i2c_master_cmd_begin(I2C_MASTER_NUM, cmd, 1000 / portTICK_PERIOD_MS);
-	i2c_cmd_link_delete(cmd);
+	ret = iot_i2c_bus_write(i2c_bus, MCP23008D_ADDR, (uint8_t[]){ MCP23008_OLAT_REG, MCP23008_OLAT_CLEAR }, 2);		// Clear OLAT register
 
 	if (ret == ESP_FAIL) 
 	{
@@ -78,19 +63,12 @@ int mcp23008d_init()
 
 int mcp23008b_init()
 {
-	i2c_cmd_handle_t cmd = i2c_cmd_link_create();
 	int ret;
 
 	ESP_LOGI(TAG, "MCP23008 onboard initializing...");
 
 	// Initialize IODIRA register, set all ports to output
-	i2c_master_start(cmd);
-	i2c_master_write_byte(cmd, MCP23008B_ADDR << 1 | WRITE_BIT, ACK_CHECK_EN);
-	i2c_master_write_byte(cmd, MCP23008_IODIRA_REG, ACK_CHECK_EN);						// IODIRA
-	i2c_master_write_byte(cmd, MCP23008_IODIRA_CLEAR, ACK_CHECK_EN);					//Set all as outputs on A
-	i2c_master_stop(cmd);
-	ret = i2c_master_cmd_begin(I2C_MASTER_NUM, cmd, 1000 / portTICK_PERIOD_MS);
-	i2c_cmd_link_delete(cmd);
+	ret = iot_i2c_bus_write(i2c_bus, MCP23008B_ADDR, (uint8_t[]){ MCP23008_IODIRA_REG, MCP23008_IODIRA_CLEAR }, 2);		//Set all as outputs on A
 
 	if (ret == ESP_FAIL) 
 	{
@@ -102,14 +80,7 @@ int mcp23008b_init()
 	
 	vTaskDelay(30 / portTICK_PERIOD_MS);
 	// initialize OLAT register
-	cmd = i2c_cmd_link_create();
-	i2c_master_start(cmd);
-	i2c_master_write_byte(cmd, MCP23008B_ADDR << 1 | WRITE_BIT, ACK_CHECK_EN);
-	i2c_master_write_byte(cmd, MCP23008_OLAT_REG, ACK_CHECK_EN);
-	i2c_master_write_byte(cmd, MCP23008_OLAT_CLEAR, ACK_CHECK_EN);						// Clear OLAT register
-	i2c_master_stop(cmd);
-	ret = i2c_master_cmd_begin(I2C_MASTER_NUM, cmd, 1000 / portTICK_PERIOD_MS);
-	i2c_cmd_link_delete(cmd);
+	ret = iot_i2c_bus_write(i2c_bus, MCP23008B_ADDR, (uint8_t[]){ MCP23008_OLAT_REG, MCP23008_OLAT_CLEAR }, 2);		// Clear OLAT register
 
 	if (ret == ESP_FAIL) 
 	{
@@ -133,7 +104,6 @@ void mcp23008d_set_pin(int _pin, int _pinValue)
 	if (!deviceHWStatus.mcp23008d_present)
 		return;
 
-	i2c_cmd_handle_t cmd = i2c_cmd_link_create();
 	int ret;
 
 
@@ -146,13 +116,7 @@ void mcp23008d_set_pin(int _pin, int _pinValue)
 		mcp23008d_olat_register = set_port_bit(mcp23008d_olat_register, _pin);
 	}
 	
-	i2c_master_start(cmd);
-	i2c_master_write_byte(cmd, MCP23008D_ADDR << 1 | WRITE_BIT, ACK_CHECK_EN);
-	i2c_master_write_byte(cmd, MCP23008_OLAT_REG, ACK_CHECK_EN);
-	i2c_master_write_byte(cmd, mcp23008d_olat_register, ACK_CHECK_EN);								// Clear OLAT register
-	i2c_master_stop(cmd);
-	ret = i2c_master_cmd_begin(I2C_MASTER_NUM, cmd, 1000 / portTICK_PERIOD_MS);
-	i2c_cmd_link_delete(cmd);
+	ret = iot_i2c_bus_write(i2c_bus, MCP23008D_ADDR, (uint8_t[]){ MCP23008_OLAT_REG, mcp23008d_olat_register }, 2);		// Clear OLAT register
 
 	if (ret == ESP_FAIL)
 	{
@@ -165,7 +129,6 @@ void mcp23008b_set_pin(int _pin, int _pinValue)
 	if (!deviceHWStatus.mcp23008b_present)		
 		return;
 
-	i2c_cmd_handle_t cmd = i2c_cmd_link_create();
 	int ret;
 
 
@@ -178,13 +141,7 @@ void mcp23008b_set_pin(int _pin, int _pinValue)
 		mcp23008b_olat_register = set_port_bit(mcp23008b_olat_register, _pin);
 	}
 	
-	i2c_master_start(cmd);
-	i2c_master_write_byte(cmd, MCP23008B_ADDR << 1 | WRITE_BIT, ACK_CHECK_EN);
-	i2c_master_write_byte(cmd, MCP23008_OLAT_REG, ACK_CHECK_EN);
-	i2c_master_write_byte(cmd, mcp23008b_olat_register, ACK_CHECK_EN);								// Clear OLAT register
-	i2c_master_stop(cmd);
-	ret = i2c_master_cmd_begin(I2C_MASTER_NUM, cmd, 1000 / portTICK_PERIOD_MS);
-	i2c_cmd_link_delete(cmd);
+	ret = iot_i2c_bus_write(i2c_bus, MCP23008B_ADDR, (uint8_t[]){ MCP23008_OLAT_REG, mcp23008b_olat_register }, 2);		// Clear OLAT register
 
 	if (ret == ESP_FAIL)
 	{
