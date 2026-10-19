@@ -12,6 +12,7 @@
 #include "freertos/task.h"
 #include "esp_netif.h"
 #include "esp_eth.h"
+#include "esp_eth_phy_lan87xx.h"
 #include "esp_event.h"
 #include "esp_log.h"
 #include "driver/gpio.h"
@@ -104,6 +105,9 @@ esp_err_t phy_init()
     phy_config.reset_gpio_num = 17; //CONFIG_EXAMPLE_ETH_PHY_RST_GPIO;
     esp32_emac_config.smi_gpio.mdc_num = 23;
     esp32_emac_config.smi_gpio.mdio_num = 18;
+    // RMII reference clock is an external 50 MHz input on GPIO0
+    esp32_emac_config.clock_config.rmii.clock_mode = EMAC_CLK_EXT_IN;
+    esp32_emac_config.clock_config.rmii.clock_gpio = 0;
 
     esp_eth_mac_t *mac = esp_eth_mac_new_esp32(&esp32_emac_config, &mac_config);
     esp_eth_phy_t *phy = esp_eth_phy_new_lan87xx(&phy_config);

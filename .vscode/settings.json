@@ -32,9 +32,9 @@
     "interface/ftdi/esp32_devkitj_v1.cfg",
     "target/esp32.cfg"
   ],
-  "idf.espIdfPathWin": "C:/Users/ajege/.espressif/frameworks/esp-idf-v5.5/",
-  "idf.toolsPathWin": "C:\\Users\\ajege\\.espressif",
-  "idf.pythonInstallPath": "C:\\Users\\ajege\\.espressif\\tools\\idf-python\\3.11.2\\python.exe",
+  "idf.espIdfPathWin": "C:/esp/v6.1/esp-idf/",
+  "idf.toolsPathWin": "C:\\Espressif\\tools",
+  "idf.pythonInstallPath": "C:\\Espressif\\tools\\python\\v6.1\\venv\\Scripts\\python.exe",
   "idf.port": "COM6",
-  "idf.currentSetup": "C:/Users/ajege/.espressif/frameworks/esp-idf-v5.5/"
+  "idf.currentSetup": "C:/esp/v6.1/esp-idf"
 }

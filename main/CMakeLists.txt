@@ -26,9 +26,9 @@ idf_component_register(
                  "include"
                  "include/mcshared"
     PRIV_REQUIRES azure-sdk-for-c parson i2c_devices
-                  app_update driver esp-tls esp_app_format esp_eth esp_event
+                  app_update esp_driver_gpio esp-tls esp_app_format esp_eth esp_event
                   esp_http_client esp_http_server esp_https_ota esp_netif
-                  esp_timer esp_wifi json lwip mbedtls mqtt nvs_flash spiffs
+                  esp_timer esp_wifi lwip mbedtls nvs_flash spiffs
 )
 
 spiffs_create_partition_image(spiffs ../html FLASH_IN_PROJECT)
