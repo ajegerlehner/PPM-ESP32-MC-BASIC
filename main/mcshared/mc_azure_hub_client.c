@@ -16,10 +16,12 @@
 #include "sdkconfig.h"
 #include "esp_log.h"
 #include "esp_app_desc.h"
+#include "esp_heap_caps.h"
+#include "esp_system.h"
 #include "esp_crt_bundle.h"
 #include "mqtt_client.h"
 #include "mbedtls/base64.h"
-#include "mbedtls/md.h"
+#include "psa/crypto.h"
 #include "azure/az_core.h"
 #include "azure/az_iot.h"
 #include "parson.h"
@@ -131,6 +133,37 @@ static char *connection_string_value(const char *connectionString, const char *k
     return NULL;
 }
 
+// HMAC-SHA256 with a volatile PSA key, the key is not stored in NVS
+static esp_err_t hmac_sha256(const uint8_t *key, size_t keyLen, const uint8_t *message, size_t messageLen, uint8_t *mac, size_t macSize)
+{
+    psa_key_attributes_t attributes = PSA_KEY_ATTRIBUTES_INIT;
+    psa_key_id_t keyId;
+    size_t macLen;
+    psa_status_t status;
+
+    psa_set_key_type(&attributes, PSA_KEY_TYPE_HMAC);
+    psa_set_key_algorithm(&attributes, PSA_ALG_HMAC(PSA_ALG_SHA_256));
+    psa_set_key_usage_flags(&attributes, PSA_KEY_USAGE_SIGN_MESSAGE);
+
+    status = psa_import_key(&attributes, key, keyLen, &keyId);
+    psa_reset_key_attributes(&attributes);
+    if (status != PSA_SUCCESS)
+    {
+        ESP_LOGE(TAG, "Failed to import SAS key: %d", (int)status);
+        return ESP_FAIL;
+    }
+
+    status = psa_mac_compute(keyId, PSA_ALG_HMAC(PSA_ALG_SHA_256), message, messageLen, mac, macSize, &macLen);
+    psa_destroy_key(keyId);
+    if (status != PSA_SUCCESS || macLen != macSize)
+    {
+        ESP_LOGE(TAG, "Failed to compute SAS signature: %d", (int)status);
+        return ESP_FAIL;
+    }
+
+    return ESP_OK;
+}
+
 static esp_err_t generate_sas_token(struct mc_iothub_client *client)
 {
     uint8_t signatureBuffer[256];
@@ -146,8 +179,8 @@ static esp_err_t generate_sas_token(struct mc_iothub_client *client)
         return ESP_FAIL;
     }
 
-    if (mbedtls_md_hmac(mbedtls_md_info_from_type(MBEDTLS_MD_SHA256), client->sasKey, client->sasKeyLen,
-                        az_span_ptr(signature), (size_t)az_span_size(signature), hmac) != 0 ||
+    if (hmac_sha256(client->sasKey, client->sasKeyLen,
+                    az_span_ptr(signature), (size_t)az_span_size(signature), hmac, sizeof(hmac)) != ESP_OK ||
         mbedtls_base64_encode(hmacBase64, sizeof(hmacBase64), &hmacBase64Len, hmac, sizeof(hmac)) != 0)
     {
         ESP_LOGE(TAG, "Failed to sign SAS token");
@@ -622,6 +655,9 @@ mc_iothub_handle_t init_iothub_client(char *deviceId)
 
     // SAS tokens need the current time
     wait_for_network_time();
+
+    ESP_LOGI(TAG, "Free heap before device config request: %" PRIu32 " bytes, largest block %u bytes",
+             esp_get_free_heap_size(), (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
 
     // get the device config from ppm iot central and provide connection string etc.
     get_device_config(deviceId);
