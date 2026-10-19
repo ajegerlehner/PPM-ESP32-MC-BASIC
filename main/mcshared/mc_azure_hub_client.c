@@ -16,6 +16,8 @@
 #include "sdkconfig.h"
 #include "esp_log.h"
 #include "esp_app_desc.h"
+#include "esp_heap_caps.h"
+#include "esp_system.h"
 #include "esp_crt_bundle.h"
 #include "mqtt_client.h"
 #include "mbedtls/base64.h"
@@ -653,6 +655,9 @@ mc_iothub_handle_t init_iothub_client(char *deviceId)
 
     // SAS tokens need the current time
     wait_for_network_time();
+
+    ESP_LOGI(TAG, "Free heap before device config request: %" PRIu32 " bytes, largest block %u bytes",
+             esp_get_free_heap_size(), (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
 
     // get the device config from ppm iot central and provide connection string etc.
     get_device_config(deviceId);

@@ -3,6 +3,6 @@
 cmake_minimum_required(VERSION 3.16)
 
 
-set(PROJECT_VER "4.0.26.29101")
+set(PROJECT_VER "2.0.26.29201")
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 project(ppm-esp32-mc-basic)
